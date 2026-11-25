@@ -1,0 +1,1463 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Power Peasant — battery monitor</title>
+<script>try{var p=localStorage.getItem('pq_theme')||'auto';var l=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches;document.documentElement.setAttribute('data-theme',p==='auto'?(l?'light':'dark'):p);}catch(e){}</script>
+<link rel="stylesheet" href="styles.css"></head><body><div class="wrap">
+
+<div class="btbanner" id="btbanner" style="display:none"><span id="bttext"></span></div>
+
+<div class="scanbar">
+  <div class="scanleft">
+    <button class="iconbtn aboutbtn" id="aboutbtn" title="About" aria-label="About"><img src="logo.png" alt=""></button>
+  </div>
+  <div class="scanc">
+    <span class="mut" id="scaninfo" data-i18n="scanning">сканування…</span>
+    <button class="iconbtn" id="showscan" data-i18n="show">Показати</button>
+  </div>
+  <div class="scanright">
+    <select class="langsel themesel" id="theme" title="Theme">
+      <option value="auto" data-i18n="themeAuto">Авто</option>
+      <option value="dark" data-i18n="themeDark">Темна</option>
+      <option value="light" data-i18n="themeLight">Світла</option>
+    </select>
+    <select class="langsel" id="lang" title="Language">
+      <option value="uk">UA</option>
+      <option value="en">EN</option>
+      <option value="de">DE</option>
+    </select>
+    <button class="iconbtn gear" id="settings" title="Settings">⚙</button>
+  </div>
+</div>
+
+<div class="chips" id="chips"></div>
+
+<header>
+  <h1><span id="dot" class="dot"></span><span id="name">Power Peasant</span></h1>
+  <span class="mut" id="status"></span>
+  <button class="iconbtn" id="edit" style="display:none">✎ <span data-i18n="edit">Редагувати</span></button>
+  <button class="iconbtn danger" id="remove" style="display:none">✕ <span data-i18n="remove">Прибрати</span></button>
+</header>
+
+<div class="grid">
+  <div class="card"><div class="k" data-i18n="packVoltage">Напруга</div><div class="v"><span id="pack">--</span><small>V</small></div></div>
+  <div class="card"><div class="k" data-i18n="current">Струм</div><div class="v"><span id="cur">--</span><small>A</small></div></div>
+  <div class="card"><div class="k" data-i18n="power">Потужність</div><div class="v"><span id="pow">--</span><small>W</small></div></div>
+  <div class="card"><div class="k" data-i18n="soc">SOC</div><div class="v"><span id="soc">--</span><small>%</small></div></div>
+  <div class="card"><div class="k" data-i18n="timeLeft">Час</div><div class="v" id="time">--</div></div>
+</div>
+
+<section>
+  <h2><span id="sectitle">Cells</span> <span id="delta" class="badge">--</span>
+      <span id="vspread" class="badge" style="display:none">--</span>
+      <span id="bal" class="badge">--</span></h2>
+  <div class="tbl" id="cells"></div>
+  <div class="legend mut" id="celllegend" style="display:none">
+    <span><span style="color:var(--grn)">■</span> <span data-i18n="lgMax">найвища</span></span>
+    <span><span style="color:var(--org)">■</span> <span data-i18n="lgMin">найнижча</span></span>
+    <span><span style="color:var(--red)">■</span> <span data-i18n="lgLow">&lt; 3.05 V</span></span>
+  </div>
+</section>
+
+<section>
+  <div class="toolbar">
+    <div class="seg" id="metrics">
+      <button data-m="cells" class="on" data-i18n="cells">Комірки</button>
+      <button data-m="pack" data-i18n="packTab">Пакет</button>
+      <button data-m="current" data-i18n="current">Струм</button>
+      <button data-m="soc">SOC</button>
+    </div>
+    <select class="stylesel" id="chartstyle" title="Chart style">
+      <option value="line" data-i18n="stLine">Лінія</option>
+      <option value="area" data-i18n="stArea">Площа</option>
+      <option value="step" data-i18n="stStep">Східці</option>
+      <option value="bars" data-i18n="stBars">Стовпці</option>
+      <option value="dots" data-i18n="stDots">Точки</option>
+    </select>
+    <div class="winwrap">
+      <select class="stylesel" id="windowsel" title="Time window">
+        <option value="300" data-i18n="w5">5 хв</option>
+        <option value="600" data-i18n="w10">10 хв</option>
+        <option value="1800" data-i18n="w30">30 хв</option>
+        <option value="3600" data-i18n="w1h">1 г</option>
+        <option value="21600" data-i18n="w6h">6 г</option>
+        <option value="86400" data-i18n="w24h">24 г</option>
+        <option value="604800" data-i18n="w7d">7 д</option>
+        <option value="2592000" data-i18n="w30d">30 д</option>
+        <option value="7776000" data-i18n="w90d">90 д</option>
+        <option value="15552000" data-i18n="w180d">180 д</option>
+        <option value="31536000" data-i18n="w1y">1 р</option>
+        <option value="63072000" data-i18n="w2y">2 р</option>
+        <option value="0" data-i18n="wAll">Все</option>
+      </select>
+      <span class="mut" id="rangeinfo"></span>
+    </div>
+  </div>
+  <div class="chart-card" id="chartcard">
+    <canvas id="chart"></canvas>
+    <div class="tip" id="tip"></div>
+    <div class="chart-empty" id="empty" style="display:none"></div>
+  </div>
+  <div class="legend mut" id="legend"></div>
+</section>
+
+<div class="grid" style="margin-top:18px">
+  <div class="card"><div class="k" data-i18n="remaining">Залишок</div><div class="v"><span id="rem">--</span><small>Ah</small></div></div>
+  <div class="card"><div class="k" data-i18n="fullCapacity">Повна ємність</div><div class="v"><span id="fcc">--</span><small>Ah</small></div></div>
+  <div class="card"><div class="k" data-i18n="cellTemp">Темп. комірок</div><div class="v"><span id="ct">--</span><small>°C</small></div></div>
+  <div class="card"><div class="k" data-i18n="mosTemp">Темп. MOSFET</div><div class="v"><span id="mt">--</span><small>°C</small></div></div>
+</div>
+
+<div class="grid">
+  <div class="card"><div class="k" data-i18n="soh">SOH</div><div class="v"><span id="soh">--</span><small>%</small></div></div>
+  <div class="card"><div class="k" data-i18n="cycles">Цикли</div><div class="v" id="cyc">--</div></div>
+  <div class="card"><div class="k" data-i18n="discharged">Розряджено</div><div class="v"><span id="dah">--</span><small>Ah</small></div></div>
+  <div class="card"><div class="k" data-i18n="protectFault">Захист / несправність</div><div class="v" style="font-size:17px" id="flags">--</div></div>
+</div>
+
+</div>
+
+<div class="modal" id="smodal">
+  <div class="box wide">
+    <h3 data-i18n="scanTitle">Пристрої поблизу</h3>
+    <div class="scantools">
+      <div class="seg" id="scantabs">
+        <button data-t="air" class="on"></button>
+        <button data-t="hist"></button>
+      </div>
+      <button class="iconbtn mini" id="clearhist" data-i18n="clearHistory">Очистити історію</button>
+    </div>
+    <div class="tbl" id="scanlist"></div>
+    <label class="chkrow" style="margin-top:12px"><input type="checkbox" id="chkOnlyBat">
+      <span data-i18n="onlyBatCheck">Показувати лише батареї</span></label>
+    <div class="hint" data-i18n="onlyBatHint">Приховує телевізори, LED-стрічки, телефони та інші пристрої у списку «В етері».</div>
+    <div class="actions"><button id="scancel" data-i18n="close">Закрити</button></div>
+  </div>
+</div>
+
+<div class="modal" id="modal">
+  <div class="box">
+    <h3 id="mtitle">Нова група</h3>
+    <div class="field"><label data-i18n="name">Назва</label><input id="gname" data-i18n-ph="namePh"></div>
+    <div class="field"><label data-i18n="connection">З'єднання</label>
+      <select id="gmode"><option value="parallel" data-i18n="optParallel"></option>
+      <option value="series" data-i18n="optSeries"></option></select></div>
+    <div class="field"><label data-i18n="batteries">Батареї</label><div class="mlist" id="gmembers"></div></div>
+    <div class="actions">
+      <button class="danger" id="gdel" style="display:none" data-i18n="del">Видалити</button>
+      <button class="primary" id="gsave" data-i18n="save">Зберегти</button>
+      <button id="gcancel" data-i18n="cancel">Скасувати</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="bmodal">
+  <div class="box">
+    <h3 data-i18n="addBatteryTitle">Додати батарею</h3>
+    <div class="field"><label data-i18n="search">Пошук</label><input id="bfilter" data-i18n-ph="searchPh"></div>
+    <div class="field"><label data-i18n="available">Доступні</label><div class="mlist" id="blist"></div></div>
+    <div class="actions"><button id="bcancel" data-i18n="close">Закрити</button></div>
+  </div>
+</div>
+
+<div class="modal" id="cfgmodal">
+  <div class="box wide" style="max-width:640px">
+    <h3 data-i18n="settings">Налаштування</h3>
+    <div class="cfggrid">
+      <div class="sec" data-i18n="secColors">Кольори</div>
+      <div class="field"><label data-i18n="colMax">Найвища комірка</label><input type="color" id="cfgMaxColor"></div>
+      <div class="field"><label data-i18n="colMin">Найнижча комірка</label><input type="color" id="cfgMinColor"></div>
+      <div class="field"><label data-i18n="colNormal">Звичайна комірка</label><input type="color" id="cfgNormColor"></div>
+      <div class="field"><label data-i18n="colCritical">Критична комірка</label><input type="color" id="cfgCritColor"></div>
+      <div class="field full"><label data-i18n="palette">Палітра графіка</label>
+        <div id="cfgPaletteList"></div>
+        <button class="iconbtn mini" id="cfgPalAdd" type="button" data-i18n="palAdd">＋ Додати колір</button>
+        <div class="hint" data-i18n="paletteHint">Кольори ліній комірок за порядком: комірка 1, 2, … Додавайте й видаляйте кнопками. Якщо кольорів менше, ніж комірок — список повторюється.</div></div>
+
+      <div class="sec" data-i18n="secCells">Комірки</div>
+      <div class="field"><label data-i18n="scaleMin">Шкала від, В</label><input type="number" step="0.01" id="cfgScaleMin"></div>
+      <div class="field"><label data-i18n="scaleMax">Шкала до, В</label><input type="number" step="0.01" id="cfgScaleMax"></div>
+      <div class="field"><label data-i18n="critMv">Критично низька, mV</label><input type="number" step="1" id="cfgCritMv"></div>
+
+      <div class="sec" data-i18n="secThresholds">Пороги</div>
+      <div class="field"><label data-i18n="dOk">Δ комірок OK, mV</label><input type="number" step="1" id="cfgDOk"></div>
+      <div class="field"><label data-i18n="dWarn">Δ комірок попередження, mV</label><input type="number" step="1" id="cfgDWarn"></div>
+      <div class="field"><label data-i18n="pOk">Δ пакетів OK, mV</label><input type="number" step="1" id="cfgPOk"></div>
+      <div class="field"><label data-i18n="pBad">Δ пакетів погано, mV</label><input type="number" step="1" id="cfgPBad"></div>
+
+      <div class="sec" data-i18n="secChart">Графік</div>
+      <div class="field"><label data-i18n="defWindow">Вікно за замовчуванням</label>
+        <select id="cfgWindow">
+          <option value="300" data-i18n="w5"></option>
+          <option value="600" data-i18n="w10"></option>
+          <option value="1800" data-i18n="w30"></option>
+          <option value="3600" data-i18n="w1h"></option>
+          <option value="21600" data-i18n="w6h"></option>
+          <option value="86400" data-i18n="w24h"></option>
+          <option value="604800" data-i18n="w7d"></option>
+          <option value="2592000" data-i18n="w30d"></option>
+          <option value="7776000" data-i18n="w90d"></option>
+          <option value="15552000" data-i18n="w180d"></option>
+          <option value="31536000" data-i18n="w1y"></option>
+          <option value="63072000" data-i18n="w2y"></option>
+          <option value="0" data-i18n="wAll"></option>
+        </select></div>
+
+      <div class="sec" data-i18n="secServer">Сервер</div>
+      <div class="field"><label data-i18n="srvPoll">Опитування, с</label><input type="number" step="0.5" id="cfgPoll"></div>
+      <div class="field"><label data-i18n="srvLog">Запис CSV, с</label><input type="number" step="1" id="cfgLog"></div>
+      <div class="field"><label data-i18n="srvHist">Історія при старті, год</label><input type="number" step="0.5" id="cfgHist"></div>
+      <div class="field full mut" style="font-size:12px" data-i18n="srvNote">Серверні значення застосуються після перезапуску (CLI має пріоритет).</div>
+
+      <button class="iconbtn full" id="cfgAbout" data-i18n="aboutTitle">Про програму</button>
+    </div>
+    <div class="actions">
+      <button class="primary" id="cfgSave" data-i18n="save">Зберегти</button>
+      <button id="cfgCancel" data-i18n="cancel">Скасувати</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="qmodal">
+  <div class="box">
+    <h3 id="qtitle"></h3>
+    <div class="qtext" id="qtext"></div>
+    <div class="actions">
+      <button class="primary" id="qok" data-i18n="ok">OK</button>
+      <button id="qcancel" data-i18n="cancel">Скасувати</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="amodal">
+  <div class="box">
+    <div class="about-head">
+      <img class="about-logo" src="logo.png" alt="Power Peasant logo">
+      <div>
+        <div class="about-name">Power Peasant</div>
+        <div class="about-desc" data-i18n="aboutDesc">Неофіційний монітор батарей Power Queen.</div>
+      </div>
+    </div>
+    <div class="about-rows">
+      <div><span data-i18n="aboutVersion">Версія</span><b id="aboutVersion">--</b></div>
+    </div>
+    <div class="about-links">
+      <a id="aboutRepo" href="#" target="_blank" rel="noopener" data-i18n="aboutRepo">GitHub</a>
+    </div>
+    <div class="about-funding" id="aboutFunding" style="display:none">
+      <div class="about-sub" data-i18n="aboutSupport">Підтримати проєкт</div>
+      <div class="fundlinks" id="aboutDonors"></div>
+    </div>
+    <div class="actions"><button id="aclose" data-i18n="close">Закрити</button></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = (v,d=2) => (v===null||v===undefined||Number.isNaN(v)) ? '--' : Number(v).toFixed(d);
+const PALETTE_DEF = ['#58a6ff','#35d07f','#f2a33c','#c792ea','#ef5b5b','#4dd0e1','#f78fb3','#a3e635'];
+let PALETTE = PALETTE_DEF.slice();
+let cfg = null;
+const T = {critMv:3050, scaleMin:3.00, scaleMax:3.45, dOk:10, dWarn:30, pOk:60, pBad:200};
+const isBatName = n => /^[A-Z]-\d{5}/i.test((n || '').trim());
+
+function cfgGet(path, fallback){
+  let o = cfg;
+  for(const k of path.split('.')){
+    if(!o || typeof o !== 'object' || !(k in o)) return fallback;
+    o = o[k];
+  }
+  return (typeof o === 'number' && isFinite(o)) ? o : fallback;
+}
+
+function applyConfig(){
+  const u = (cfg && cfg.ui) || {};
+  const c = u.colors || {};
+  const st = document.documentElement.style;
+  if(c.cellMax) st.setProperty('--grn', c.cellMax);
+  if(c.cellMin) st.setProperty('--org', c.cellMin);
+  if(c.cellNormal) st.setProperty('--blu', c.cellNormal);
+  if(c.cellCritical) st.setProperty('--red', c.cellCritical);
+  if(Array.isArray(c.chartPalette) && c.chartPalette.length) PALETTE = c.chartPalette.slice();
+  T.critMv = cfgGet('ui.cells.criticalMv', 3050);
+  T.scaleMin = cfgGet('ui.cells.scaleMinV', 3.00);
+  T.scaleMax = cfgGet('ui.cells.scaleMaxV', 3.45);
+  if(T.scaleMax <= T.scaleMin){ T.scaleMin = 3.00; T.scaleMax = 3.45; }
+  T.dOk = cfgGet('ui.thresholds.cellDeltaOkMv', 10);
+  T.dWarn = cfgGet('ui.thresholds.cellDeltaWarnMv', 30);
+  T.pOk = cfgGet('ui.thresholds.packSpreadOkMv', 60);
+  T.pBad = cfgGet('ui.thresholds.packSpreadBadMv', 200);
+  winSec = cfgGet('ui.chart.defaultWindowSec', 600);
+  const winSel = $('windowsel');
+  if(winSel){
+    if(![...winSel.options].some(o => Number(o.value) === winSec)) winSec = 600;
+    winSel.value = String(winSec);
+  }
+}
+
+const STR = {
+  uk:{
+    edit:"Редагувати", remove:"Прибрати", show:"Показати", close:"Закрити", cancel:"Скасувати",
+    save:"Зберегти", del:"Видалити", addBat:"Батарея", addGroup:"Група", addDo:"＋ Додати",
+    connect:"＋ Під'єднати", none:"немає",
+    scanning:"сканування…",
+    scanLine:"В етері: {n} пристроїв · BMS: {b} · під'єднано: {c} · скан {time}",
+    scanTitle:"Пристрої поблизу",
+    tabAir:"В етері ({n})", tabHist:"Історія ({n})", clearHistory:"Очистити історію",
+    confirmClear:"Очистити історію знайдених пристроїв?",
+    thDevice:"Пристрій", thAddr:"Адреса", thStatus:"Статус", thLast:"Востаннє", thCount:"Разів",
+    stConnected:"під'єднано", stOffline:"offline", stNew:"нова", stRemoved:"прибрано",
+    inAir:"в етері", notInAir:"не в етері", nothingFound:"нічого не знайдено",
+    emptyHistory:"історія порожня", noAvailable:"немає доступних батарей", unnamed:"(без імені)",
+    packVoltage:"Напруга", current:"Струм", currentS:"Струм", power:"Потужність",
+    soc:"SOC", timeLeft:"Час", timeToEmpty:"до розряду", timeToFull:"до заряду", dShort:"д",
+    soc:"SOC", remaining:"Залишок", fullCapacity:"Повна ємність", cellTemp:"Темп. комірок",
+    mosTemp:"Темп. MOSFET", soh:"SOH", cycles:"Цикли", discharged:"Розряджено",
+    protectFault:"Захист / несправність",
+    cells:"Комірки", members:"Елементи", level:"Рівень", voltage:"Напруга",
+    battery:"Батарея", temp:"Темп.", deltaCell:"Δ ком.", cellN:"Комірка {n}",
+    deltaVal:"Δ {v} mV", deltaMax:"Δ макс {v} mV",
+    vSpread:"Δ пакетів {v} mV",
+    vSpreadTip:"Різниця напруг між учасниками групи. Для паралельного з'єднання має бути близько 0; велика різниця означає, що батареї зараз не з'єднані або одна щойно після заряду.",
+    lgMax:"найвища", lgMin:"найнижча", lgLow:"< 3.05 V",
+    balancing:"балансування: {list}", notBalancing:"не балансується",
+    parallel:"паралельно", series:"послідовно", pack:"Напруга", packTab:"Напруга",
+    windowInfo:"вікно {w} · {n} точок", collecting:"збираю дані…", noData:"немає даних у цьому вікні",
+    w5:"5 хв", w10:"10 хв", w30:"30 хв", w1h:"1 г", w6h:"6 г", w24h:"24 г", w7d:"7 д",
+    w30d:"30 д", w90d:"90 д", w180d:"180 д", w1y:"1 р", w2y:"2 р", wAll:"Все",
+    rangeAll:"Все · з {from} по {to}", rangeStep:"крок {step}", rangeDataFrom:"дані з {from}",
+    stLine:"Лінія", stArea:"Площа", stStep:"Східці", stBars:"Стовпці", stDots:"Точки",
+    minShort:"хв", secShort:"с", hourShort:"г",
+    agoS:"{n} с тому", agoM:"{n} хв тому", agoH:"{n} г тому", agoD:"{n} д тому",
+    liveStatus:"оновлено {time} · опитування #{n}",
+    grpStatus:"група · {on}/{tot} онлайн{part} · {mode}", partial:" · частково",
+    connecting:"з'єднання…", searching:"пошук…", monitorOffline:"монітор офлайн",
+    newGroup:"Нова група", editGroup:"Редагувати групу", name:"Назва", namePh:"Наприклад: Банк 12V",
+    connection:"З'єднання", optParallel:"Паралельно (струм сумується)",
+    optSeries:"Послідовно (напруга сумується)", batteries:"Батареї",
+    online:"online", offline:"offline", noDevices:"немає знайдених батарей",
+    addBatteryTitle:"Додати батарею", search:"Пошук", searchPh:"ім'я або MAC", available:"Доступні",
+    settings:"Налаштування",
+    aboutTitle:"Про програму", aboutDesc:"Неофіційний монітор LiFePO4-батарей Power Queen.",
+    aboutVersion:"Версія", aboutRepo:"Сторінка проекту на github.com", aboutDonate:"Підтримати",
+    aboutSupport:"Підтримати проєкт",
+    themeAuto:"Авто", themeDark:"Темна", themeLight:"Світла",
+    btOff:"Bluetooth вимкнено — увімкніть адаптер, щоб бачити батареї.",
+    btNoAdapter:"Bluetooth-адаптер не знайдено. Під'єднайте адаптер.",
+    btDenied:"Доступ до Bluetooth заборонено системою.",
+    btError:"Bluetooth недоступний: {msg}",
+    secColors:"Кольори", colMax:"Найвища комірка", colMin:"Найнижча комірка",
+    colNormal:"Звичайна комірка", colCritical:"Критична комірка",
+    palette:"Палітра графіка", palAdd:"＋ Додати колір",
+    paletteHint:"Кольори ліній комірок за порядком: комірка 1, 2, … Додавайте й видаляйте кнопками. Якщо кольорів менше, ніж комірок — список повторюється.",
+    secCells:"Комірки", scaleMin:"Шкала від, В", scaleMax:"Шкала до, В",
+    critMv:"Критично низька, mV",
+    secThresholds:"Пороги", dOk:"Δ комірок OK, mV", dWarn:"Δ комірок попередження, mV",
+    pOk:"Δ пакетів OK, mV", pBad:"Δ пакетів погано, mV",
+    secChart:"Графік", defWindow:"Вікно за замовчуванням",
+    onlyBatHint:"Приховує телевізори, LED-стрічки, телефони та інші пристрої у списку «В етері».",
+    onlyBatShort:"лише батареї", onlyBatCheck:"Показувати лише батареї",
+    secServer:"Сервер", srvPoll:"Опитування, с", srvLog:"Запис CSV, с",
+    srvHist:"Історія при старті, год",
+    srvNote:"Серверні значення застосуються після перезапуску (CLI має пріоритет).",
+    ok:"OK",
+    confirmRemoveTitle:"Прибрати батарею?",
+    confirmRemoveBody:"«{name}» зникне зі списку (її буде видно у скані).\n• з усіх груп її буде виключено\n• історія в CSV залишиться",
+    confirmClearTitle:"Очистити історію?",
+  },
+  en:{
+    edit:"Edit", remove:"Remove", show:"Show", close:"Close", cancel:"Cancel", save:"Save",
+    del:"Delete", addBat:"Battery", addGroup:"Group", addDo:"＋ Add", connect:"＋ Connect", none:"none",
+    scanning:"scanning…",
+    scanLine:"In air: {n} devices · BMS: {b} · connected: {c} · scan {time}",
+    scanTitle:"Devices nearby",
+    tabAir:"In air ({n})", tabHist:"History ({n})", clearHistory:"Clear history",
+    confirmClear:"Clear the discovery history?",
+    thDevice:"Device", thAddr:"Address", thStatus:"Status", thLast:"Last seen", thCount:"Times",
+    stConnected:"connected", stOffline:"offline", stNew:"new", stRemoved:"removed",
+    inAir:"in air", notInAir:"not in air", nothingFound:"nothing found",
+    emptyHistory:"history is empty", noAvailable:"no batteries available", unnamed:"(no name)",
+    packVoltage:"Voltage", current:"Current", currentS:"Current", power:"Power", soc:"SOC",
+    timeLeft:"Time", timeToEmpty:"to empty", timeToFull:"to full", dShort:"d",
+    remaining:"Remaining", fullCapacity:"Full capacity", cellTemp:"Cell temp", mosTemp:"MOS temp",
+    soh:"SOH", cycles:"Cycles", discharged:"Discharged", protectFault:"Protection / fault",
+    cells:"Cells", members:"Members", level:"Level", voltage:"Voltage", battery:"Battery",
+    temp:"Temp", deltaCell:"Δ cell", cellN:"Cell {n}", deltaVal:"Δ {v} mV", deltaMax:"Δ max {v} mV",
+    vSpread:"Δ packs {v} mV",
+    vSpreadTip:"Voltage difference between group members. For a parallel bank it should be near 0; a large gap means the batteries are not connected right now or one has just been charged.",
+    lgMax:"highest", lgMin:"lowest", lgLow:"< 3.05 V",
+    balancing:"balancing: {list}", notBalancing:"not balancing", parallel:"parallel", series:"series",
+    pack:"Voltage", packTab:"Voltage", windowInfo:"window {w} · {n} points",
+    collecting:"collecting data…", noData:"no data in this window",
+    w5:"5m", w10:"10m", w30:"30m", w1h:"1h", w6h:"6h", w24h:"24h", w7d:"7d",
+    w30d:"30d", w90d:"90d", w180d:"180d", w1y:"1y", w2y:"2y", wAll:"All",
+    rangeAll:"All · from {from} to {to}", rangeStep:"step {step}", rangeDataFrom:"data from {from}",
+    stLine:"Line", stArea:"Area", stStep:"Step", stBars:"Bars", stDots:"Dots",
+    minShort:"min", secShort:"s", hourShort:"h",
+    agoS:"{n} s ago", agoM:"{n} min ago", agoH:"{n} h ago", agoD:"{n} d ago",
+    liveStatus:"update {time} · poll #{n}",
+    grpStatus:"group · {on}/{tot} online{part} · {mode}", partial:" · partial",
+    connecting:"connecting…", searching:"searching…", monitorOffline:"monitor offline",
+    newGroup:"New group", editGroup:"Edit group", name:"Name", namePh:"e.g. Bank 12V",
+    connection:"Connection", optParallel:"Parallel (current adds up)",
+    optSeries:"Series (voltage adds up)", batteries:"Batteries",
+    online:"online", offline:"offline", noDevices:"no batteries found",
+    addBatteryTitle:"Add battery", search:"Search", searchPh:"name or MAC", available:"Available",
+    settings:"Settings",
+    aboutTitle:"About", aboutDesc:"Unofficial monitor for Power Queen LiFePO4 batteries.",
+    aboutVersion:"Version", aboutRepo:"Project page on github.com", aboutDonate:"Donate",
+    aboutSupport:"Support the project",
+    themeAuto:"Auto", themeDark:"Dark", themeLight:"Light",
+    btOff:"Bluetooth is off — enable the adapter to see batteries.",
+    btNoAdapter:"No Bluetooth adapter found. Connect an adapter.",
+    btDenied:"Bluetooth access is denied by the system.",
+    btError:"Bluetooth unavailable: {msg}",
+    secColors:"Colors", colMax:"Highest cell", colMin:"Lowest cell",
+    colNormal:"Normal cell", colCritical:"Critical cell",
+    palette:"Chart palette", palAdd:"＋ Add color",
+    paletteHint:"Line colors for the cell chart, in order: cell 1, 2, … Add or remove them with the buttons. If there are fewer colors than cells, the list repeats.",
+    secCells:"Cells", scaleMin:"Scale from, V", scaleMax:"Scale to, V",
+    critMv:"Critically low, mV",
+    secThresholds:"Thresholds", dOk:"Cell Δ OK, mV", dWarn:"Cell Δ warning, mV",
+    pOk:"Pack Δ OK, mV", pBad:"Pack Δ bad, mV",
+    secChart:"Chart", defWindow:"Default window",
+    onlyBatHint:"Hides TVs, LED strips, phones and other devices in the “In air” list.",
+    onlyBatShort:"batteries only", onlyBatCheck:"Show only batteries",
+    secServer:"Server", srvPoll:"Poll interval, s", srvLog:"CSV row interval, s",
+    srvHist:"History on start, h",
+    srvNote:"Server values apply after a restart (CLI takes precedence).",
+    ok:"OK",
+    confirmRemoveTitle:"Remove battery?",
+    confirmRemoveBody:"“{name}” will disappear from the list (still visible in scan).\n• removed from all groups\n• CSV history is kept",
+    confirmClearTitle:"Clear history?",
+  },
+  de:{
+    edit:"Bearbeiten", remove:"Entfernen", show:"Anzeigen", close:"Schließen", cancel:"Abbrechen",
+    save:"Speichern", del:"Löschen", addBat:"Batterie", addGroup:"Gruppe", addDo:"＋ Hinzufügen",
+    connect:"＋ Verbinden", none:"keine",
+    scanning:"Scannen…",
+    scanLine:"Im Funk: {n} Geräte · BMS: {b} · verbunden: {c} · Scan {time}",
+    scanTitle:"Geräte in der Nähe",
+    tabAir:"Im Funk ({n})", tabHist:"Verlauf ({n})", clearHistory:"Verlauf löschen",
+    confirmClear:"Verlauf der gefundenen Geräte löschen?",
+    thDevice:"Gerät", thAddr:"Adresse", thStatus:"Status", thLast:"Zuletzt", thCount:"Male",
+    stConnected:"verbunden", stOffline:"offline", stNew:"neu", stRemoved:"entfernt",
+    inAir:"im Funk", notInAir:"nicht im Funk", nothingFound:"nichts gefunden",
+    emptyHistory:"Verlauf ist leer", noAvailable:"keine Batterien verfügbar", unnamed:"(ohne Namen)",
+    packVoltage:"Spannung", current:"Strom", currentS:"Strom", power:"Leistung", soc:"SOC",
+    timeLeft:"Zeit", timeToEmpty:"bis leer", timeToFull:"bis voll", dShort:"T",
+    remaining:"Rest", fullCapacity:"Volle Kapazität", cellTemp:"Zellentemp.", mosTemp:"MOS-Temp.",
+    soh:"SOH", cycles:"Zyklen", discharged:"Entladen", protectFault:"Schutz / Fehler",
+    cells:"Zellen", members:"Mitglieder", level:"Niveau", voltage:"Spannung", battery:"Batterie",
+    temp:"Temp", deltaCell:"Δ Zelle", cellN:"Zelle {n}", deltaVal:"Δ {v} mV", deltaMax:"Δ max {v} mV",
+    vSpread:"Δ Packs {v} mV",
+    vSpreadTip:"Spannungsunterschied zwischen den Gruppenmitgliedern. Bei Parallelschaltung nahe 0; ein großer Unterschied heißt, sie sind gerade nicht verbunden oder eine wurde eben geladen.",
+    lgMax:"höchste", lgMin:"niedrigste", lgLow:"< 3.05 V",
+    balancing:"Balancing: {list}", notBalancing:"kein Balancing",
+    parallel:"parallel", series:"seriell", pack:"Spannung", packTab:"Spannung",
+    windowInfo:"Fenster {w} · {n} Punkte", collecting:"Daten werden gesammelt…",
+    noData:"keine Daten in diesem Zeitraum",
+    w5:"5 Min", w10:"10 Min", w30:"30 Min", w1h:"1 Std", w6h:"6 Std", w24h:"24 Std", w7d:"7 Tage",
+    w30d:"30 Tage", w90d:"90 Tage", w180d:"180 Tage", w1y:"1 Jahr", w2y:"2 Jahre", wAll:"Alle",
+    rangeAll:"Alle · von {from} bis {to}", rangeStep:"Schritt {step}", rangeDataFrom:"Daten ab {from}",
+    stLine:"Linie", stArea:"Fläche", stStep:"Stufen", stBars:"Balken", stDots:"Punkte",
+    minShort:"Min", secShort:"s", hourShort:"Std",
+    agoS:"vor {n} s", agoM:"vor {n} Min", agoH:"vor {n} Std", agoD:"vor {n} T",
+    liveStatus:"Aktualisiert {time} · Abfrage #{n}",
+    grpStatus:"Gruppe · {on}/{tot} online{part} · {mode}", partial:" · teilweise",
+    connecting:"Verbinde…", searching:"Suche…", monitorOffline:"Monitor offline",
+    newGroup:"Neue Gruppe", editGroup:"Gruppe bearbeiten", name:"Name", namePh:"z. B. Bank 12V",
+    connection:"Verbindung", optParallel:"Parallel (Ströme addieren)",
+    optSeries:"Seriell (Spannungen addieren)", batteries:"Batterien",
+    online:"online", offline:"offline", noDevices:"keine Batterien gefunden",
+    addBatteryTitle:"Batterie hinzufügen", search:"Suche", searchPh:"Name oder MAC",
+    available:"Verfügbar",
+    settings:"Einstellungen",
+    aboutTitle:"Über", aboutDesc:"Inoffizieller Monitor für Power-Queen-LiFePO4-Batterien.",
+    aboutVersion:"Version", aboutRepo:"Projektseite auf github.com", aboutDonate:"Spenden",
+    aboutSupport:"Projekt unterstützen",
+    themeAuto:"Auto", themeDark:"Dunkel", themeLight:"Hell",
+    btOff:"Bluetooth ist aus — schalten Sie den Adapter ein.",
+    btNoAdapter:"Kein Bluetooth-Adapter gefunden. Adapter anschließen.",
+    btDenied:"Bluetooth-Zugriff wurde vom System verweigert.",
+    btError:"Bluetooth nicht verfügbar: {msg}",
+    secColors:"Farben", colMax:"Höchste Zelle", colMin:"Niedrigste Zelle",
+    colNormal:"Normale Zelle", colCritical:"Kritische Zelle",
+    palette:"Diagrammpalette", palAdd:"＋ Farbe hinzufügen",
+    paletteHint:"Linienfarben für das Zellen-Diagramm, der Reihe nach: Zelle 1, 2, … Mit den Knöpfen hinzufügen/entfernen. Bei weniger Farben als Zellen wiederholt sich die Liste.",
+    secCells:"Zellen", scaleMin:"Skala von, V", scaleMax:"Skala bis, V",
+    critMv:"Kritisch niedrig, mV",
+    secThresholds:"Schwellen", dOk:"Zellen-Δ OK, mV", dWarn:"Zellen-Δ Warnung, mV",
+    pOk:"Pack-Δ OK, mV", pBad:"Pack-Δ schlecht, mV",
+    secChart:"Diagramm", defWindow:"Standardfenster",
+    onlyBatHint:"Blendet TVs, LED-Streifen, Telefone und andere Geräte in der Liste „Im Funk“ aus.",
+    onlyBatShort:"nur Batterien", onlyBatCheck:"Nur Batterien anzeigen",
+    secServer:"Server", srvPoll:"Abfrageintervall, s", srvLog:"CSV-Intervall, s",
+    srvHist:"Verlauf beim Start, Std",
+    srvNote:"Serverwerte gelten nach einem Neustart (CLI hat Vorrang).",
+    ok:"OK",
+    confirmRemoveTitle:"Batterie entfernen?",
+    confirmRemoveBody:"„{name}“ verschwindet aus der Liste (bleibt im Scan sichtbar).\n• wird aus allen Gruppen entfernt\n• CSV-Verlauf bleibt erhalten",
+    confirmClearTitle:"Verlauf löschen?",
+  }
+};
+
+let lang = localStorage.getItem('pq_lang') || 'en';
+function t(k, vars){
+  const table = STR[lang] || STR.uk;
+  let s = table[k] !== undefined ? table[k] : (STR.uk[k] !== undefined ? STR.uk[k] : k);
+  if(vars) for(const key in vars) s = s.split('{'+key+'}').join(vars[key]);
+  return s;
+}
+function applyStatic(){
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
+  document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); });
+  document.documentElement.lang = lang;
+  const ls = $('lang'); if(ls) ls.value = lang;
+}
+
+let themePref = localStorage.getItem('pq_theme') || 'auto';
+const themeMq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
+function resolvedTheme(){
+  if(themePref === 'light' || themePref === 'dark') return themePref;
+  return themeMq && themeMq.matches ? 'light' : 'dark';
+}
+function applyTheme(){
+  document.documentElement.setAttribute('data-theme', resolvedTheme());
+  const sel = $('theme'); if(sel) sel.value = themePref;
+}
+function onThemeChange(){
+  applyTheme();
+  if(sel && hist[sel]) drawChart();
+}
+if(themeMq){
+  const onChange = () => { if(themePref === 'auto') onThemeChange(); };
+  if(themeMq.addEventListener) themeMq.addEventListener('change', onChange);
+  else if(themeMq.addListener) themeMq.addListener(onChange);
+}
+
+let devices = [], groups = [], sel = null, metric = 'cells', winSec = 600;
+let chartStyle = 'line';
+let hist = {}, histMeta = {}, hover = null, geom = null, editing = null;
+let scan = {ts:0, items:[], seen:[]}, scanRenderedTs = -1, scanMode = 'air';
+let battTs = -1;
+let bt = null;
+
+function items(){ return groups.concat(devices); }
+function cur(){ return items().find(x => x.id === sel); }
+function isGroup(x){ return !!x && x.kind === 'group'; }
+
+async function poll(){
+  try{
+    const r = await fetch('/api/data', {cache:'no-store'});
+    const s = await r.json();
+    devices = s.devices || [];
+    groups = (s.groups || []).map(g => ({...g, kind:'group'}));
+    if(s.scan) scan = s.scan;
+    bt = s.bluetooth || null;
+    if(!sel || !items().some(x => x.id === sel)){
+      sel = groups.length ? groups[0].id : (devices[0] && devices[0].id);
+    }
+    render();
+    if($('bmodal').classList.contains('show') && scan.ts !== battTs){
+      battTs = scan.ts; renderBatteryList();
+    }
+    if($('smodal').classList.contains('show')) renderScan();
+  }catch(e){
+    $('status').textContent = t('monitorOffline');
+    $('dot').className = 'dot off';
+  }
+}
+
+async function loadHistory(id){
+  if(!id) return;
+  const win = winSec;
+  try{
+    const r = await fetch(`/api/history?id=${encodeURIComponent(id)}&window=${win}`, {cache:'no-store'});
+    const h = await r.json();
+    if(id === sel && win !== winSec) return;
+    hist[id] = h.points || [];
+    histMeta[id] = {from: h.from || null, to: h.to || null, step: Number(h.step) || 0};
+    if(id === sel){ renderRange(); drawChart(); }
+  }catch(e){}
+}
+
+function fmtRangeMoment(ts, span, sameDay){
+  const d = new Date(ts * 1000), now = new Date();
+  const p = n => String(n).padStart(2, '0');
+  const time = `${p(d.getHours())}:${p(d.getMinutes())}`;
+  if(sameDay && span <= 86400) return time;
+  const date = `${p(d.getDate())}.${p(d.getMonth() + 1)}`;
+  const full = d.getFullYear() === now.getFullYear() ? date : `${date}.${d.getFullYear()}`;
+  return span <= 7 * 86400 ? `${full} ${time}` : full;
+}
+
+function fmtStep(sec){
+  if(sec < 60) return `${Math.max(1, Math.round(sec))} ${t('secShort')}`;
+  if(sec < 3600) return `${Math.max(1, Math.round(sec / 60))} ${t('minShort')}`;
+  const h = sec / 3600;
+  return `${h >= 10 ? Math.round(h) : h.toFixed(1)} ${t('hourShort')}`;
+}
+
+function renderRange(){
+  const el = $('rangeinfo');
+  if(!el) return;
+  const m = histMeta[sel];
+  if(!m || !m.from || !m.to){ el.textContent = ''; return; }
+  const parts = [];
+  if(!winSec){
+    const span = m.to - m.from;
+    const sameDay = new Date(m.from * 1000).toDateString() === new Date(m.to * 1000).toDateString();
+    parts.push(t('rangeAll', {
+      from: fmtRangeMoment(m.from, span, sameDay),
+      to: fmtRangeMoment(m.to, span, sameDay)
+    }));
+  } else {
+    const cutoff = Date.now() / 1000 - winSec;
+    if(m.from > cutoff + Math.max(60, winSec * 0.02)){
+      const sameDayNow = new Date(m.from * 1000).toDateString() === new Date().toDateString();
+      parts.push(t('rangeDataFrom', {from: fmtRangeMoment(m.from, winSec, sameDayNow)}));
+    }
+  }
+  if(m.step > 0) parts.push(t('rangeStep', {step: fmtStep(m.step)}));
+  el.textContent = parts.join(' · ');
+}
+
+function capLabel(x){
+  const d = x.data || {};
+  if(x.kind !== 'group' || !d.cap_total_ah) return '';
+  const tot = Math.round(d.cap_total_ah);
+  const on = Math.round(d.cap_online_ah || 0);
+  if(d.online === d.members_total) return `${tot} Ah`;
+  if(d.online === 0) return `${tot} Ah`;
+  if((d.cap_known || 0) === d.members_total) return `${on} / ${tot} Ah`;
+  return `${on} Ah (${d.online}/${d.members_total})`;
+}
+
+function chip(x){
+  const on = x.connected && x.data && x.data.soc !== undefined;
+  const name = (x.name || '').replace(/^P-/, '');
+  const short = x.kind === 'group' ? name : name.replace('12100BNNA70-', '');
+  const cap = capLabel(x);
+  return `<div class="chip ${x.kind==='group'?'grp':''} ${x.id===sel?'sel':''}" data-id="${x.id}">
+    <span class="dot ${on?'on':'off'}"></span>
+    <span class="nm" title="${name}">${short}${cap ? ' <span class="cap">'+cap+'</span>' : ''}</span>
+    <span class="soc">${on ? x.data.soc+'%' : '--'}</span>
+  </div>`;
+}
+
+function fmtDuration(sec){
+  if(sec === null || sec === undefined || !isFinite(sec)) return '--';
+  const totalMin = Math.max(1, Math.round(sec / 60));
+  const days = Math.floor(totalMin / 1440);
+  const hours = Math.floor((totalMin % 1440) / 60);
+  const mins = totalMin % 60;
+  if(days > 0) return `${days} ${t('dShort')} ${hours} ${t('hourShort')}`;
+  if(hours > 0) return `${hours} ${t('hourShort')} ${mins} ${t('minShort')}`;
+  return `${mins} ${t('minShort')}`;
+}
+
+function timeEstimate(d){
+  if(!d || typeof d.current_a !== 'number') return null;
+  const cur = Math.abs(d.current_a);
+  if(cur < 0.1) return null;
+  const rem = Number(d.remaining_ah) || 0;
+  const fcc = Number(d.fcc_ah) || 0;
+  if(d.current_a < 0){
+    if(rem <= 0) return null;
+    return {sec: rem / cur * 3600, mode: 'discharge'};
+  }
+  const need = fcc - rem;
+  if(need <= 0) return {sec: 0, mode: 'charge'};
+  return {sec: need / cur * 3600, mode: 'charge'};
+}
+
+function renderChips(){
+  $('chips').innerHTML = groups.map(chip).join('') + devices.map(chip).join('') +
+    `<div class="chipbtns">
+       <div class="chip add" id="addbat"><span>＋</span><span class="nm">${t('addBat')}</span></div>
+       <div class="chip add grpbtn" id="addgrp"><span>＋</span><span class="nm">${t('addGroup')}</span></div>
+     </div>`;
+  document.querySelectorAll('.chip[data-id]').forEach(el => el.onclick = () => select(el.dataset.id));
+  $('addgrp').onclick = () => openModal(null);
+  $('addbat').onclick = () => openBatteryModal();
+}
+
+function ago(ts){
+  const s = Math.max(0, Date.now()/1000 - ts);
+  if(s < 60) return t('agoS', {n: Math.round(s)});
+  if(s < 3600) return t('agoM', {n: Math.round(s/60)});
+  if(s < 86400) return t('agoH', {n: Math.round(s/3600)});
+  return t('agoD', {n: Math.round(s/86400)});
+}
+
+function renderScan(){
+  const items = scan.items || [];
+  const seen = scan.seen || [];
+  const onlyBat = !!(cfg && cfg.ui && cfg.ui.scan && cfg.ui.scan.onlyBatteries);
+  const chk = $('chkOnlyBat');
+  if(chk) chk.checked = onlyBat;
+  const air = onlyBat ? items.filter(i => isBatName(i.name || i.label || '')) : items;
+  const bms = air.filter(i => i.ffe0).length;
+  const online = devices.filter(d => d.connected).length;
+  $('scaninfo').textContent = scan.ts
+    ? t('scanLine', {n:items.length, b:bms, c:online,
+                     time:new Date(scan.ts*1000).toLocaleTimeString()})
+      + (onlyBat ? ' · ' + t('onlyBatShort') : '')
+    : t('scanning');
+  const tabAir = document.querySelector('#scantabs [data-t="air"]');
+  const tabHist = document.querySelector('#scantabs [data-t="hist"]');
+  if(tabAir) tabAir.textContent = t('tabAir', {n: air.length});
+  if(tabHist) tabHist.textContent = t('tabHist', {n: seen.length});
+  $('clearhist').style.display = (scanMode === 'hist') ? '' : 'none';
+  if(!$('smodal').classList.contains('show') || scan.ts === scanRenderedTs) return;
+  scanRenderedTs = scan.ts;
+
+  if(scanMode === 'hist'){
+    $('scanlist').innerHTML =
+      `<div class="row seen head"><div>${t('thDevice')}</div><div>${t('thAddr')}</div>
+       <div class="num">${t('thLast')}</div><div class="num">${t('thCount')}</div>
+       <div class="num">RSSI</div></div>` +
+      (seen.length ? seen.slice(0, 150).map(r => {
+        const nm = r.name ? r.name.replace(/^P-/,'') : (r.label || t('unnamed'));
+        const when = r.in_air ? `<span class="badge ok">${t('inAir')}</span>` : ago(r.last_seen);
+        const badges = [
+          r.connected ? `<span class="badge ok">${t('stConnected')}</span>` : '',
+          r.ignored ? `<span class="badge">${t('stRemoved')}</span>` : '',
+          r.ffe0 ? '<span class="badge grp">BMS</span>' : ''
+        ].filter(Boolean).join(' ');
+        return `<div class="row seen ${r.known?'lnk':''}" data-id="${r.address}" data-known="${r.known?1:0}">
+          <div>${nm} ${badges}</div>
+          <div class="mut">${r.address}</div>
+          <div class="num">${when}</div>
+          <div class="num">${r.count}</div>
+          <div class="num">${r.last_rssi} dBm</div></div>`;
+      }).join('') : `<div class="row seen"><div class="mut">${t('emptyHistory')}</div></div>`);
+    document.querySelectorAll('.row.seen[data-known="1"]').forEach(el =>
+      el.onclick = () => { select(el.dataset.id); $('smodal').classList.remove('show'); });
+    return;
+  }
+
+  $('scanlist').innerHTML =
+    `<div class="row scan head"><div>${t('thDevice')}</div><div>${t('thAddr')}</div>
+     <div class="num">RSSI</div><div class="num">${t('thStatus')}</div></div>` +
+    (air.length ? air.map(i => {
+      const status = i.connected ? `<span class="badge ok">${t('stConnected')}</span>`
+        : i.known ? `<span class="badge bad">${t('stOffline')}</span>`
+        : i.ignored ? `<span class="badge">${t('stRemoved')}</span>`
+        : (i.ffe0 ? `<span class="badge warn">${t('stNew')}</span>` : '<span class="badge">—</span>');
+      const isBatName = /^[A-Z]-\d{5}/i.test(i.name || '');
+      const action = (i.ffe0 && isBatName && (!i.known || i.ignored))
+        ? `<button class="iconbtn mini" data-add="${i.address}">${t('connect')}</button>`
+        : status;
+      const nm = i.name ? i.name.replace(/^P-/,'') : (i.label || t('unnamed'));
+      return `<div class="row scan ${i.known?'lnk':''}" data-id="${i.address}" data-known="${i.known?1:0}">
+        <div>${nm}${i.ignored?' <span class="badge">'+t('stRemoved')+'</span>':''} ${i.ffe0?'<span class="badge grp">BMS</span>':''}</div>
+        <div class="mut">${i.address}</div>
+        <div class="num">${i.rssi} dBm</div>
+        <div class="num">${action}</div></div>`;
+    }).join('') : `<div class="row scan"><div class="mut">${t('nothingFound')}</div></div>`);
+  document.querySelectorAll('.row.scan[data-known="1"]').forEach(el =>
+    el.onclick = () => { select(el.dataset.id); $('smodal').classList.remove('show'); });
+}
+
+function select(id){
+  sel = id; hover = null;
+  const x = cur();
+  if(isGroup(x) && metric === 'cells') setMetric('pack');
+  render();
+  loadHistory(sel);
+}
+
+function cellRow(i, mv, min, max, balancing){
+  const v = mv/1000;
+  const pct = Math.max(2, Math.min(100, (v-T.scaleMin)/(T.scaleMax-T.scaleMin)*100));
+  const col = mv < T.critMv ? 'var(--red)'
+            : (min !== max && mv === min) ? 'var(--org)'
+            : (mv >= max ? 'var(--grn)' : 'var(--blu)');
+  return `<div class="row">
+    <div>${t('cellN', {n:i+1})}${balancing ? ' <span class="badge ok">B</span>' : ''}</div>
+    <div class="bar"><i style="width:${pct}%;background:${col}"></i></div>
+    <div class="num">${fmt(v,3)} V</div>
+    <div class="num mut">${mv} mV</div>
+  </div>`;
+}
+
+function memberRow(m){
+  const on = m.connected && m.pack_v !== undefined;
+  return `<div class="row mem" data-dev="${m.id||''}">
+    <div><span class="dot ${on?'on':'off'}"></span> ${m.name.replace('12100BNNA70-','')}</div>
+    <div class="num">${on ? fmt(m.pack_v,3)+' V' : '--'}</div>
+    <div class="num">${on ? (m.current_a>0?'+':'')+fmt(m.current_a,2)+' A' : '--'}</div>
+    <div class="num">${on ? m.soc+' %' : '--'}</div>
+    <div class="num">${on ? t('deltaVal',{v:m.delta_mv}) : '--'}</div>
+    <div class="num mut">${on ? m.cell_temp_c+'°C' : '--'}</div>
+  </div>`;
+}
+
+async function openAbout(){
+  let a = {};
+  try { a = await (await fetch('/api/about', {cache:'no-store'})).json(); } catch(e){}
+  $('aboutVersion').textContent = a.version || 'dev';
+  const repo = $('aboutRepo');
+  if(a.repo){ repo.href = a.repo; repo.style.display = ''; } else repo.style.display = 'none';
+  const links = Array.isArray(a.funding) ? a.funding
+              : (a.donate ? [{label: t('aboutDonate'), url: a.donate}] : []);
+  const box = $('aboutFunding'), list = $('aboutDonors');
+  if(links.length){
+    list.innerHTML = links.map(l =>
+      `<a class="fundlink" href="${esc(l.url)}" target="_blank" rel="noopener">♥ ${esc(l.label || l.url)}</a>`).join('');
+    box.style.display = '';
+  } else {
+    list.innerHTML = '';
+    box.style.display = 'none';
+  }
+  $('amodal').classList.add('show');
+}
+
+function renderBt(){
+  const el = $('btbanner'), txt = $('bttext');
+  if(!bt || bt.ok !== false){ el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.className = 'btbanner' + ((bt.reason === 'off' || bt.reason === 'denied') ? '' : ' bad');
+  if(bt.reason === 'off') txt.textContent = t('btOff');
+  else if(bt.reason === 'no_adapter') txt.textContent = t('btNoAdapter');
+  else if(bt.reason === 'denied') txt.textContent = t('btDenied');
+  else txt.textContent = t('btError', {msg: bt.message || 'unknown'});
+}
+
+function render(){
+  renderChips();
+  renderScan();
+  renderBt();
+  renderRange();
+  const x = cur();
+  const on = x && x.connected && x.data && (x.data.pack_mv !== undefined || x.data.soc !== undefined);
+  const g = isGroup(x);
+  $('dot').className = 'dot ' + (on ? 'on' : 'off');
+  $('name').textContent = x ? (isGroup(x) && capLabel(x) ? `${x.name} · ${capLabel(x)}` : x.name.replace(/^P-/, '')) : 'Power Peasant';
+  $('edit').style.display = g ? '' : 'none';
+  $('remove').style.display = (x && !g) ? '' : 'none';
+  $('status').textContent = on
+    ? (g ? t('grpStatus', {on:x.data.online, tot:x.data.members_total,
+                           part:(x.data.partial ? t('partial') : ''),
+                           mode:t(x.data.mode === 'parallel' ? 'parallel' : 'series')})
+         : t('liveStatus', {time:new Date(x.updated*1000).toLocaleTimeString(), n:x.polls}))
+    : (x ? (x.error || t('connecting')) : t('searching'));
+
+  const d = on ? x.data : {};
+  $('pack').textContent = on ? fmt((d.pack_mv||0)/1000,3) : '--';
+  $('cur').textContent = on ? (d.current_a>0?'+':'')+fmt(d.current_a,2) : '--';
+  $('pow').textContent = on ? fmt(d.power_w,1) : '--';
+  $('soc').textContent = on ? d.soc : '--';
+  const te = on ? timeEstimate(d) : null;
+  $('time').textContent = on ? fmtDuration(te ? te.sec : null) : '--';
+  $('time').title = te ? t(te.mode === 'charge' ? 'timeToFull' : 'timeToEmpty') : '';
+  $('rem').textContent = on ? fmt(d.remaining_ah,2) : '--';
+  $('fcc').textContent = on ? ((g && d.partial && d.cap_total_ah)
+    ? `${fmt(d.fcc_ah,2)} / ${fmt(d.cap_total_ah,2)}` : fmt(d.fcc_ah,2)) : '--';
+  $('ct').textContent = on ? d.cell_temp_c : '--';
+  $('mt').textContent = on ? d.mos_temp_c : '--';
+  $('soh').textContent = on ? d.soh : '--';
+  $('cyc').textContent = on ? d.cycles : '--';
+  $('dah').textContent = on ? d.discharged_ah : '--';
+  $('flags').innerHTML = !on ? '--' : ((d.protect==='00000000' && d.failure==='000000')
+    ? `<span class="badge ok">${t('none')}</span>`
+    : `<span class="badge bad">P:${d.protect} F:${d.failure}</span>`);
+
+  if(g){
+    $('sectitle').textContent = t('members');
+    $('delta').textContent = on ? t('deltaMax', {v:d.delta_mv}) : '--';
+    $('delta').className = 'badge ' + (!on?'':(d.delta_mv<=T.dOk?'ok':(d.delta_mv<=T.dWarn?'warn':'bad')));
+    $('bal').textContent = t(x.data.mode === 'parallel' ? 'parallel' : 'series');
+    $('bal').className = 'badge grp';
+    $('celllegend').style.display = 'none';
+    const packs = (x.data.members || [])
+      .filter(m => m.connected && m.pack_v !== undefined && m.pack_v !== null)
+      .map(m => m.pack_v * 1000);
+    if(on && packs.length > 1){
+      const spread = Math.round(Math.max(...packs) - Math.min(...packs));
+      $('vspread').textContent = t('vSpread', {v:spread});
+      $('vspread').className = 'badge ' + (spread<=T.pOk?'ok':(spread<=T.pBad?'warn':'bad'));
+      $('vspread').title = t('vSpreadTip');
+      $('vspread').style.display = '';
+    } else {
+      $('vspread').style.display = 'none';
+    }
+    $('cells').innerHTML = on
+      ? `<div class="row mem head"><div>${t('battery')}</div><div class="num">${t('voltage')}</div>
+         <div class="num">${t('currentS')}</div><div class="num">SOC</div>
+         <div class="num">${t('deltaCell')}</div><div class="num">${t('temp')}</div></div>`
+        + (x.data.members||[]).map(memberRow).join('')
+      : '';
+    document.querySelectorAll('.row.mem[data-dev]').forEach(el => {
+      if(el.dataset.dev) el.onclick = () => select(el.dataset.dev);
+    });
+  } else {
+    $('sectitle').textContent = t('cells');
+    $('vspread').style.display = 'none';
+    $('celllegend').style.display = on ? '' : 'none';
+    if(!on){
+      $('cells').innerHTML=''; $('delta').textContent='--'; $('bal').textContent='--';
+      $('delta').className='badge'; $('bal').className='badge';
+    } else {
+      const cells = d.cells_mv || [], max = Math.max(...cells), min = Math.min(...cells);
+      $('cells').innerHTML = `<div class="row head"><div>#</div><div>${t('level')}</div>
+        <div class="num">${t('voltage')}</div><div class="num"><span class="unit">mV</span></div></div>` +
+        cells.map((mv,i)=>cellRow(i,mv,min,max,(d.balance_mask>>i)&1)).join('');
+      const dmv = d.delta_mv;
+      $('delta').textContent = t('deltaVal', {v:dmv});
+      $('delta').className = 'badge ' + (dmv<=T.dOk?'ok':(dmv<=T.dWarn?'warn':'bad'));
+      const bal = d.balance_cells || [];
+      $('bal').textContent = bal.length ? t('balancing', {list:bal.join(', ')}) : t('notBalancing');
+      $('bal').className = 'badge ' + (bal.length?'warn':'');
+    }
+  }
+  $('metrics').querySelector('[data-m="cells"]').disabled = g;
+  if(g && metric === 'cells') metric = 'pack';
+  document.querySelectorAll('#metrics button').forEach(b => b.classList.toggle('on', b.dataset.m === metric));
+  drawChart();
+}
+
+function seriesFor(points, m){
+  if(m === 'cells' && points[0].length > 4){
+    const n = points[0].length - 4, arr = [];
+    for(let i=0;i<n;i++) arr.push({name:t('cellN',{n:i+1}), color:PALETTE[i%PALETTE.length],
+      vals: points.map(p => p[4+i]*1000), unit:'mV', dec:0});
+    return arr;
+  }
+  if(m === 'cells' || m === 'pack') return [{name:t('pack'), color:'#58a6ff', vals:points.map(p=>p[1]), unit:'V', dec:3}];
+  if(m === 'current') return [{name:t('currentS'), color:'#f2a33c', vals:points.map(p=>p[2]), unit:'A', dec:2}];
+  return [{name:'SOC', color:'#35d07f', vals:points.map(p=>p[3]), unit:'%', dec:0}];
+}
+
+function drawChart(){
+  const cv = $('chart'), tip = $('tip'), empty = $('empty');
+  const nowSec = Date.now() / 1000;
+  const pts = (hist[sel] || []).filter(p => !winSec || p[0] >= nowSec - winSec);
+  if(pts.length < 2){
+    empty.style.display='flex';
+    empty.textContent = pts.length ? t('collecting') : t('noData');
+    $('legend').innerHTML='';
+    const c0 = cv.getContext('2d'); c0.clearRect(0,0,cv.width,cv.height);
+    return;
+  }
+  empty.style.display='none';
+
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth, H = cv.clientHeight;
+  if(cv.width !== Math.round(W*dpr) || cv.height !== Math.round(H*dpr)){
+    cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr);
+  }
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,W,H);
+
+  const P = {l:52, r:14, t:14, b:26};
+  const series = seriesFor(pts, metric);
+  let lo = Infinity, hi = -Infinity;
+  series.forEach(s => s.vals.forEach(v => { if(v<lo) lo=v; if(v>hi) hi=v; }));
+  if(metric === 'current'){ lo = Math.min(lo, 0); hi = Math.max(hi, 0); }
+  if(lo === hi){ lo -= 1; hi += 1; }
+  const pad = (hi-lo)*0.12 || 1;
+  lo -= pad; hi += pad;
+
+  const t0 = winSec ? nowSec - winSec : pts[0][0];
+  const t1 = winSec ? nowSec : pts[pts.length-1][0];
+  const span = Math.max(1, t1 - t0);
+  const X = t => P.l + (t - t0)/span * (W - P.l - P.r);
+  const Y = v => H - P.b - (v - lo)/(hi - lo) * (H - P.t - P.b);
+
+  const themeCss = getComputedStyle(document.documentElement);
+  const cssVar = (name, fallback) => (themeCss.getPropertyValue(name) || '').trim() || fallback;
+
+  ctx.strokeStyle = cssVar('--grid', '#222834'); ctx.fillStyle = cssVar('--mut', '#8b94a7');
+  ctx.lineWidth = 1; ctx.font = '11px system-ui,Segoe UI,sans-serif';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for(let i=0;i<=4;i++){
+    const v = lo + (hi-lo)*i/4, y = Y(v);
+    ctx.beginPath(); ctx.moveTo(P.l, y); ctx.lineTo(W-P.r, y); ctx.stroke();
+    const spanY = hi - lo;
+    const dec = metric==='cells' ? 0 : metric==='pack' ? (spanY < 0.06 ? 3 : 2)
+              : metric==='current' ? 1 : 0;
+    ctx.fillText(v.toFixed(dec), P.l-8, y);
+  }
+  ctx.textBaseline = 'top';
+  const ticks = 4;
+  for(let i=0;i<=ticks;i++){
+    const tt = t0 + span*i/ticks;
+    const lbl = new Date(tt*1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    ctx.textAlign = i===0 ? 'left' : (i===ticks ? 'right' : 'center');
+    ctx.fillText(lbl, X(tt), H - P.b + 7);
+  }
+
+  if(metric === 'current'){
+    ctx.strokeStyle = cssVar('--axis', '#3a4250'); ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.moveTo(P.l, Y(0)); ctx.lineTo(W-P.r, Y(0)); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  series.forEach((s, si) => {
+    const last = s.vals[s.vals.length-1];
+    const buildPath = () => {
+      ctx.beginPath();
+      if(chartStyle === 'step'){
+        pts.forEach((p,i) => {
+          const x = X(p[0]), y = Y(s.vals[i]);
+          if(i === 0) ctx.moveTo(x, y);
+          else { ctx.lineTo(x, Y(s.vals[i-1])); ctx.lineTo(x, y); }
+        });
+      } else {
+        pts.forEach((p,i) => {
+          const x = X(p[0]), y = Y(s.vals[i]);
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        });
+      }
+    };
+
+    if(chartStyle === 'bars'){
+      const slot = (W - P.l - P.r) / Math.max(1, pts.length - 1);
+      const groupW = Math.max(1, slot * 0.78);
+      const bw = Math.max(1, groupW / series.length);
+      ctx.fillStyle = s.color; ctx.globalAlpha = 0.85;
+      pts.forEach((p,i) => {
+        const y = Y(s.vals[i]);
+        const x = X(p[0]) - groupW/2 + si*bw;
+        ctx.fillRect(x, y, Math.max(1, bw - 1), H - P.b - y);
+      });
+      ctx.globalAlpha = 1;
+      return;
+    }
+
+    if(chartStyle === 'dots'){
+      ctx.fillStyle = s.color;
+      pts.forEach((p,i) => {
+        ctx.beginPath(); ctx.arc(X(p[0]), Y(s.vals[i]), 1.8, 0, Math.PI*2); ctx.fill();
+      });
+      return;
+    }
+
+    if(chartStyle === 'area'){
+      buildPath();
+      ctx.save();
+      ctx.lineTo(X(t1), H - P.b);
+      ctx.lineTo(X(t0), H - P.b);
+      ctx.closePath();
+      ctx.fillStyle = s.color; ctx.globalAlpha = 0.14; ctx.fill();
+      ctx.restore();
+    }
+
+    buildPath();
+    ctx.strokeStyle = s.color; ctx.lineWidth = 1.8; ctx.lineJoin = 'round';
+    ctx.stroke();
+    ctx.fillStyle = s.color;
+    ctx.beginPath(); ctx.arc(X(t1), Y(last), 2.6, 0, Math.PI*2); ctx.fill();
+  });
+
+  geom = {P, W, H, t0, t1, pts, series};
+
+  if(hover !== null && hover >= 0 && hover < pts.length){
+    const hx = X(pts[hover][0]);
+    ctx.strokeStyle = cssVar('--hoverline', '#5a6678'); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(hx, P.t); ctx.lineTo(hx, H-P.b); ctx.stroke();
+    series.forEach(s => {
+      ctx.fillStyle = s.color;
+      ctx.beginPath(); ctx.arc(hx, Y(s.vals[hover]), 3, 0, Math.PI*2); ctx.fill();
+    });
+    const dt = new Date(pts[hover][0]*1000).toLocaleTimeString();
+    tip.innerHTML = `<b>${dt}</b>` + series.map(s =>
+      `<div><span style="color:${s.color}">●</span> ${s.name}: <b>${s.vals[hover].toFixed(s.dec)} ${s.unit}</b></div>`).join('');
+    tip.style.left = (cv.offsetLeft + Math.min(W - 150, Math.max(8, hx + 12))) + 'px';
+    tip.style.top = (cv.offsetTop + 10) + 'px';
+    tip.style.display = 'block';
+  } else tip.style.display = 'none';
+
+  $('legend').innerHTML = series.map(s =>
+    `<span><span style="color:${s.color}">■</span> ${s.name} ${s.vals[s.vals.length-1].toFixed(s.dec)} ${s.unit}</span>`
+  ).join('');
+}
+
+// ---- add battery modal ----
+function batteryCandidates(){
+  const map = new Map();
+  (scan.items || []).forEach(i => {
+    if(i.ffe0 && !i.known && isBatName(i.name)) map.set(i.address, {
+      address:i.address, name:i.name, rssi:i.rssi, ignored:!!i.ignored, in_air:true
+    });
+  });
+  (scan.seen || []).forEach(r => {
+    if(!r.ffe0 || r.known || !isBatName(r.name)) return;
+    const c = map.get(r.address);
+    if(c){ c.ignored = !!r.ignored; c.name = c.name || r.name; }
+    else map.set(r.address, {
+      address:r.address, name:r.name, rssi:r.last_rssi, ignored:!!r.ignored,
+      in_air:false, last_seen:r.last_seen
+    });
+  });
+  return [...map.values()].sort((a,b) =>
+    (b.in_air?1:0)-(a.in_air?1:0) || (b.rssi||-999)-(a.rssi||-999));
+}
+
+function renderBatteryList(){
+  const q = ($('bfilter').value || '').trim().toLowerCase();
+  const list = batteryCandidates().filter(c =>
+    !q || (c.name||'').toLowerCase().includes(q) || c.address.toLowerCase().includes(q));
+  $('blist').innerHTML = list.length ? list.map(c => `
+    <div class="brow">
+      <div class="nm">
+        <div>${c.name ? c.name.replace(/^P-/,'') : t('unnamed')}</div>
+        <div class="mut">${c.address} · ${c.in_air ? (c.rssi + ' dBm') : ago(c.last_seen)}</div>
+      </div>
+      <div>${c.ignored ? `<span class="badge">${t('stRemoved')}</span>` : ''}
+           ${c.in_air ? `<span class="badge ok">${t('inAir')}</span>` : `<span class="badge">${t('notInAir')}</span>`}</div>
+      <button class="iconbtn mini" data-badd="${c.address}">${t('addDo')}</button>
+    </div>`).join('')
+    : `<div class="brow mut">${t('noAvailable')}</div>`;
+  document.querySelectorAll('[data-badd]').forEach(b => b.onclick = () => addBattery(b));
+}
+
+async function addBattery(btn){
+  const addr = btn.dataset.badd;
+  btn.disabled = true; btn.textContent = '…';
+  try{
+    await fetch('/api/devices', {method:'POST', headers:{'Content-Type':'application/json'},
+                                body: JSON.stringify({address: addr})});
+  }catch(e){}
+  await poll();
+  renderBatteryList();
+}
+
+function openBatteryModal(){
+  $('bfilter').value = '';
+  battTs = -1;
+  renderBatteryList();
+  $('bmodal').classList.add('show');
+  setTimeout(() => $('bfilter').focus(), 50);
+}
+
+// ---- groups modal ----
+function openModal(group){
+  editing = group;
+  $('mtitle').textContent = group ? t('editGroup') : t('newGroup');
+  $('gname').value = group ? group.name : '';
+  $('gmode').value = group ? (group.data && group.data.mode || 'parallel') : 'parallel';
+  const members = new Set(group ? (group.members || []) : []);
+  $('gmembers').innerHTML = devices.length
+    ? devices.map(d => `<label><input type="checkbox" value="${d.name}" ${members.has(d.name)?'checked':''}>
+        <span class="nm" title="${d.name}">${d.name}</span>
+        <span class="st">${d.connected ? t('online') : t('offline')}</span></label>`).join('')
+    : `<div style="padding:10px 12px" class="mut">${t('noDevices')}</div>`;
+  $('gdel').style.display = group ? '' : 'none';
+  $('modal').classList.add('show');
+  setTimeout(()=>$('gname').focus(), 50);
+}
+function closeModal(){ $('modal').classList.remove('show'); editing = null; }
+
+async function saveModal(){
+  const name = $('gname').value.trim();
+  if(!name){ $('gname').focus(); return; }
+  const members = [...$('gmembers').querySelectorAll('input:checked')].map(i => i.value);
+  const mode = $('gmode').value;
+  // always merge with the server's current list, so a stale page cannot drop other groups
+  let payload = [];
+  try{
+    const fresh = await (await fetch('/api/data', {cache:'no-store'})).json();
+    payload = (fresh.groups || []).map(g => ({
+      id: g.id, name: g.name, mode: (g.data && g.data.mode) || 'parallel', members: g.members || []
+    }));
+  }catch(e){
+    payload = items().filter(x => x.kind === 'group').map(g => ({
+      id: g.id, name: g.name, mode: (g.data && g.data.mode) || 'parallel', members: g.members || []
+    }));
+  }
+  if(editing){
+    const i = payload.findIndex(g => g.id === editing.id);
+    if(i >= 0) payload[i] = {id: editing.id, name, mode, members};
+    else payload.push({id: editing.id, name, mode, members});
+  } else {
+    payload.push({id: crypto.randomUUID(), name, mode, members});
+  }
+  await fetch('/api/groups', {method:'POST', headers:{'Content-Type':'application/json'},
+                              body: JSON.stringify({groups: payload})});
+  const saved = payload.find(g => g.name === name);
+  closeModal();
+  await poll();
+  if(saved) select(saved.id);
+}
+
+async function deleteGroup(){
+  if(!editing) return;
+  let payload = [];
+  try{
+    const fresh = await (await fetch('/api/data', {cache:'no-store'})).json();
+    payload = (fresh.groups || []).map(g => ({
+      id: g.id, name: g.name, mode: (g.data && g.data.mode) || 'parallel', members: g.members || []
+    }));
+  }catch(e){
+    payload = items().filter(x => x.kind === 'group').map(g => ({
+      id: g.id, name: g.name, mode: (g.data && g.data.mode) || 'parallel', members: g.members || []
+    }));
+  }
+  payload = payload.filter(g => g.id !== editing.id);
+  await fetch('/api/groups', {method:'POST', headers:{'Content-Type':'application/json'},
+                              body: JSON.stringify({groups: payload})});
+  closeModal();
+  sel = null;
+  await poll();
+}
+
+// ---- confirm dialog ----
+let askResolve = null;
+
+function askConfirm(title, text, okLabel){
+  return new Promise(resolve => {
+    askResolve = resolve;
+    $('qtitle').textContent = title;
+    $('qtext').textContent = text;
+    $('qok').textContent = okLabel || t('ok');
+    $('qmodal').classList.add('show');
+  });
+}
+
+function closeAsk(result){
+  $('qmodal').classList.remove('show');
+  if(askResolve){
+    const resolve = askResolve;
+    askResolve = null;
+    resolve(result);
+  }
+}
+
+// ---- settings modal ----
+let paletteDraft = [];
+
+function renderPaletteEditor(){
+  const box = $('cfgPaletteList');
+  box.innerHTML = paletteDraft.map((col, i) => `
+    <div class="palrow">
+      <input type="color" data-pal="${i}" value="${col}">
+      <button class="iconbtn mini" type="button" data-paldel="${i}" title="${t('del')}">−</button>
+    </div>`).join('');
+  box.querySelectorAll('[data-pal]').forEach(inp =>
+    inp.addEventListener('input', e => { paletteDraft[+e.target.dataset.pal] = e.target.value; }));
+  box.querySelectorAll('[data-paldel]').forEach(btn =>
+    btn.addEventListener('click', () => {
+      if (paletteDraft.length > 1) {
+        paletteDraft.splice(+btn.dataset.paldel, 1);
+        renderPaletteEditor();
+      }
+    }));
+  $('cfgPalAdd').style.display = paletteDraft.length >= 16 ? 'none' : '';
+}
+
+function openSettings(){
+  const u = (cfg && cfg.ui) || {}, c = u.colors || {}, cells = u.cells || {},
+        th = u.thresholds || {}, ch = u.chart || {}, srv = (cfg && cfg.server) || {};
+  $('cfgMaxColor').value = c.cellMax || '#35d07f';
+  $('cfgMinColor').value = c.cellMin || '#f2a33c';
+  $('cfgNormColor').value = c.cellNormal || '#58a6ff';
+  $('cfgCritColor').value = c.cellCritical || '#ef5b5b';
+  paletteDraft = (c.chartPalette && c.chartPalette.length) ? c.chartPalette.slice() : PALETTE_DEF.slice();
+  renderPaletteEditor();
+  $('cfgScaleMin').value = cells.scaleMinV ?? 3.00;
+  $('cfgScaleMax').value = cells.scaleMaxV ?? 3.45;
+  $('cfgCritMv').value = cells.criticalMv ?? 3050;
+  $('cfgDOk').value = th.cellDeltaOkMv ?? 10;
+  $('cfgDWarn').value = th.cellDeltaWarnMv ?? 30;
+  $('cfgPOk').value = th.packSpreadOkMv ?? 60;
+  $('cfgPBad').value = th.packSpreadBadMv ?? 200;
+  $('cfgWindow').value = String(ch.defaultWindowSec ?? 600);
+  $('cfgPoll').value = srv.pollIntervalSec ?? 2;
+  $('cfgLog').value = srv.logIntervalSec ?? 10;
+  $('cfgHist').value = srv.historyHours ?? 2;
+  $('cfgmodal').classList.add('show');
+}
+
+function numv(id, fallback){
+  const v = parseFloat($(id).value);
+  return Number.isFinite(v) ? v : fallback;
+}
+
+async function saveSettings(){
+  const aboutCfg = (cfg && cfg.ui && cfg.ui.about) || {};
+  const body = {
+    ui: {
+      language: (cfg && cfg.ui && cfg.ui.language) || 'en',
+      colors: {
+        cellMax: $('cfgMaxColor').value,
+        cellMin: $('cfgMinColor').value,
+        cellNormal: $('cfgNormColor').value,
+        cellCritical: $('cfgCritColor').value,
+        chartPalette: paletteDraft.slice()
+      },
+      cells: { scaleMinV: numv('cfgScaleMin', 3.00),
+               scaleMaxV: numv('cfgScaleMax', 3.45),
+               criticalMv: numv('cfgCritMv', 3050) },
+      thresholds: { cellDeltaOkMv: numv('cfgDOk', 10),
+                    cellDeltaWarnMv: numv('cfgDWarn', 30),
+                    packSpreadOkMv: numv('cfgPOk', 60),
+                    packSpreadBadMv: numv('cfgPBad', 200) },
+      chart: { defaultWindowSec: parseInt($('cfgWindow').value, 10) || 0 },
+      scan: { onlyBatteries: !!(cfg && cfg.ui && cfg.ui.scan && cfg.ui.scan.onlyBatteries) },
+      about: { repo: aboutCfg.repo || '', donate: aboutCfg.donate || '' }
+    },
+    server: { pollIntervalSec: numv('cfgPoll', 2),
+              logIntervalSec: numv('cfgLog', 10),
+              historyHours: numv('cfgHist', 2) }
+  };
+  try{
+    const r = await fetch('/api/config', {method:'POST', headers:{'Content-Type':'application/json'},
+                                         body: JSON.stringify(body)});
+    if(r.ok){
+      cfg = await r.json();
+      applyConfig();
+      render();
+      if(sel) loadHistory(sel);
+      drawChart();
+    }
+  }catch(e){}
+  $('cfgmodal').classList.remove('show');
+}
+
+// ---- interactions ----
+function setMetric(m){
+  metric = m;
+  document.querySelectorAll('#metrics button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
+  hover = null; drawChart();
+}
+document.querySelectorAll('#metrics button').forEach(b => b.onclick = () => setMetric(b.dataset.m));
+$('windowsel').onchange = e => {
+  winSec = Number(e.target.value);
+  hover = null;
+  loadHistory(sel);
+  drawChart();
+};
+$('edit').onclick = () => { const x = cur(); if(isGroup(x)) openModal(x); };
+$('remove').onclick = async () => {
+  const x = cur();
+  if(!x || isGroup(x)) return;
+  if(!(await askConfirm(t('confirmRemoveTitle'), t('confirmRemoveBody', {name:x.name}), t('remove')))) return;
+  try{
+    await fetch('/api/devices/remove', {method:'POST', headers:{'Content-Type':'application/json'},
+                                        body: JSON.stringify({address: x.id})});
+  }catch(e){}
+  sel = null;
+  await poll();
+};
+$('showscan').onclick = () => {
+  $('smodal').classList.add('show');
+  scanRenderedTs = -1;
+  renderScan();
+};
+$('chkOnlyBat').onchange = async e => {
+  if(!cfg) return;
+  cfg.ui = cfg.ui || {};
+  cfg.ui.scan = cfg.ui.scan || {};
+  cfg.ui.scan.onlyBatteries = e.target.checked;
+  try{
+    const r = await fetch('/api/config', {method:'POST', headers:{'Content-Type':'application/json'},
+                                         body: JSON.stringify(cfg)});
+    if(r.ok) cfg = await r.json();
+  }catch(err){}
+  scanRenderedTs = -1;
+  renderScan();
+};
+$('scancel').onclick = () => $('smodal').classList.remove('show');
+$('smodal').addEventListener('click', e => { if(e.target === $('smodal')) $('smodal').classList.remove('show'); });
+document.querySelectorAll('#scantabs button').forEach(b => b.onclick = () => {
+  scanMode = b.dataset.t;
+  document.querySelectorAll('#scantabs button').forEach(x => x.classList.toggle('on', x === b));
+  scanRenderedTs = -1; renderScan();
+});
+$('clearhist').onclick = async () => {
+  if(!(await askConfirm(t('confirmClearTitle'), t('confirmClear'), t('clearHistory')))) return;
+  try{ await fetch('/api/scan/clear', {method:'POST'}); }catch(e){}
+  await poll();
+  scanRenderedTs = -1; renderScan();
+};
+$('scanlist').addEventListener('click', async ev => {
+  const b = ev.target.closest('[data-add]');
+  if(!b || b.disabled) return;
+  const addr = b.dataset.add;
+  b.disabled = true; b.textContent = '…';
+  try{
+    await fetch('/api/devices', {method:'POST', headers:{'Content-Type':'application/json'},
+                                body: JSON.stringify({address: addr})});
+  }catch(e){}
+  await poll();
+  scanRenderedTs = -1; renderScan();
+});
+$('gcancel').onclick = closeModal;
+$('gsave').onclick = saveModal;
+$('gdel').onclick = deleteGroup;
+$('bcancel').onclick = () => $('bmodal').classList.remove('show');
+$('bfilter').oninput = renderBatteryList;
+$('bmodal').addEventListener('click', e => { if(e.target === $('bmodal')) $('bmodal').classList.remove('show'); });
+$('modal').addEventListener('click', e => { if(e.target === $('modal')) closeModal(); });
+$('qok').onclick = () => closeAsk(true);
+$('qcancel').onclick = () => closeAsk(false);
+$('qmodal').addEventListener('click', e => { if(e.target === $('qmodal')) closeAsk(false); });
+$('settings').onclick = openSettings;
+$('cfgAbout').onclick = openAbout;
+$('theme').onchange = e => {
+  themePref = e.target.value;
+  localStorage.setItem('pq_theme', themePref);
+  onThemeChange();
+};
+$('aboutbtn').onclick = openAbout;
+$('aclose').onclick = () => $('amodal').classList.remove('show');
+$('amodal').addEventListener('click', e => { if(e.target === $('amodal')) $('amodal').classList.remove('show'); });
+$('cfgPalAdd').onclick = () => {
+  if (paletteDraft.length >= 16) return;
+  paletteDraft.push(PALETTE_DEF[paletteDraft.length % PALETTE_DEF.length]);
+  renderPaletteEditor();
+};
+$('chartstyle').onchange = e => {
+  chartStyle = e.target.value;
+  localStorage.setItem('pq_style', chartStyle);
+  drawChart();
+};
+$('cfgCancel').onclick = () => $('cfgmodal').classList.remove('show');
+$('cfgSave').onclick = saveSettings;
+$('cfgmodal').addEventListener('click', e => { if(e.target === $('cfgmodal')) $('cfgmodal').classList.remove('show'); });
+$('lang').onchange = e => {
+  lang = e.target.value;
+  localStorage.setItem('pq_lang', lang);
+  applyStatic();
+  render();
+  renderScan();
+  if($('bmodal').classList.contains('show')) renderBatteryList();
+  if(hist[sel]) drawChart();
+};
+
+$('chart').addEventListener('mousemove', ev => {
+  if(!geom) return;
+  const rect = ev.target.getBoundingClientRect();
+  const x = ev.clientX - rect.left;
+  const {P, W, t0, t1, pts} = geom;
+  const tt = t0 + Math.max(0, Math.min(1, (x - P.l)/(W - P.l - P.r))) * (t1 - t0);
+  let best = 0, bd = Infinity;
+  pts.forEach((p,i) => { const dd = Math.abs(p[0]-tt); if(dd < bd){ bd = dd; best = i; } });
+  hover = best; drawChart();
+});
+$('chart').addEventListener('mouseleave', () => { hover = null; drawChart(); });
+window.addEventListener('resize', () => drawChart());
+
+async function boot(){
+  try{
+    cfg = await (await fetch('/api/config', {cache:'no-store'})).json();
+  }catch(e){ cfg = null; }
+  applyConfig();
+  chartStyle = localStorage.getItem('pq_style') || 'line';
+  $('chartstyle').value = chartStyle;
+  lang = localStorage.getItem('pq_lang') || (cfg && cfg.ui && cfg.ui.language) || 'en';
+  applyStatic();
+  applyTheme();
+  poll();
+  setInterval(poll, 1000);
+  setInterval(() => { if(sel) loadHistory(sel); }, 2000);
+}
+boot();
+</script></body></html>

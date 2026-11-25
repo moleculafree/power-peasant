@@ -1,0 +1,56 @@
+name: build-windows
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r packaging/requirements-build.txt
+
+      - name: Run tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Build portable app and self-extracting exe
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "dev-$env:GITHUB_RUN_NUMBER" }
+          .\packaging\build.ps1 -Sfx -Version $version
+          $sfx = "dist\release\PowerPeasant-$version-win64.exe"
+          if (-not (Test-Path $sfx)) { throw "SFX not found: $sfx" }
+          "SFX_PATH=$sfx" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PowerPeasant-win64
+          path: ${{ env.SFX_PATH }}
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.SFX_PATH }}
+          generate_release_notes: true
+          body: |
+            Portable self-extracting build for Windows x64.
+
+            Run the downloaded `.exe` and choose the folder to unpack into; it creates
+            the `PowerPeasant` folder there, then start `PowerPeasant.exe` inside it.
+            Requires Windows 10/11 x64 with Edge WebView2 (preinstalled) and a
+            Bluetooth LE adapter.

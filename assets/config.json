@@ -1,0 +1,47 @@
+{
+  "ui": {
+    "language": "en",
+    "colors": {
+      "cellMax": "#35d07f",
+      "cellMin": "#f2a33c",
+      "cellNormal": "#58a6ff",
+      "cellCritical": "#ef5b5b",
+      "chartPalette": [
+        "#58a6ff",
+        "#35d07f",
+        "#f2a33c",
+        "#c792ea",
+        "#ef5b5b",
+        "#4dd0e1",
+        "#f78fb3",
+        "#a3e635"
+      ]
+    },
+    "cells": {
+      "scaleMinV": 3.0,
+      "scaleMaxV": 3.45,
+      "criticalMv": 3050
+    },
+    "thresholds": {
+      "cellDeltaOkMv": 10,
+      "cellDeltaWarnMv": 30,
+      "packSpreadOkMv": 60,
+      "packSpreadBadMv": 200
+    },
+    "chart": {
+      "defaultWindowSec": 600
+    },
+    "scan": {
+      "onlyBatteries": true
+    },
+    "about": {
+      "repo": "https://github.com/moleculafree/power-peasant",
+      "donate": ""
+    }
+  },
+  "server": {
+    "pollIntervalSec": 2.0,
+    "logIntervalSec": 10.0,
+    "historyHours": 2.0
+  }
+}
