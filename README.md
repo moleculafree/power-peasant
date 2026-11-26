@@ -10,9 +10,34 @@ No cloud, No phone, No account. Free.
 
 **Read in:** [English](docs/en-README.md) · [Українська](docs/uk-README.md)
 
+## Supported batteries
+
+Verified on real hardware:
+
+- **Power Queen** 12.8 V 100 Ah (`P-12100BNNA70`)
+- **Power Queen** 12 V 140 Ah
+- **Power Queen** 24 V / 25.6 V 100 Ah
+- **Redodo** 12.8 V 280 Ah (`R-12280BNN200`)
+- **LiTime** 12.8 V 100 Ah
+- **LiTime** 24 V 50 Ah
+- **LiTime** 12 V and 36 V
+
+Likely compatible, but not tested yet:
+
+- other capacities of Power Queen, Redodo and LiTime on the same BMS;
+- **Starry Sea** batteries with `S-…` / `SS-…` names;
+- 36 V and 48 V packs.
+
+Batteries from other brands may use a different Bluetooth protocol and are not
+supported. The monitor only reads data and never changes battery settings or
+switches.
+
 ## Windows Installation
-Windows users can download the portable build exe from
-[Releases](https://github.com/moleculafree/power-peasant/releases) (Windows 10/11 x64).
+Windows users can download the installer
+`PowerPeasant-<version>-win64-setup.exe` (defaults to `C:\Program Files\PowerPeasant`)
+from [Releases](https://github.com/moleculafree/power-peasant/releases) (Windows
+10/11 x64). When a build has no NSIS, the release contains the portable
+self-extracting exe instead.
 
 
 ## Quick start from sources (linux/windows)

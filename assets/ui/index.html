@@ -3,40 +3,72 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Power Peasant — battery monitor</title>
 <script>try{var p=localStorage.getItem('pq_theme')||'auto';var l=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches;document.documentElement.setAttribute('data-theme',p==='auto'?(l?'light':'dark'):p);}catch(e){}</script>
-<link rel="stylesheet" href="styles.css"></head><body><div class="wrap">
+<link rel="stylesheet" href="styles.css"></head><body>
+
+<div class="bootmask" id="bootmask" role="status" aria-live="polite">
+  <span class="spinner big" aria-hidden="true"></span>
+  <div id="boottext" data-i18n="bootStarting">Запуск…</div>
+</div>
+
+<div class="wrap">
 
 <div class="btbanner" id="btbanner" style="display:none"><span id="bttext"></span></div>
+<div class="updbanner" id="updbanner" style="display:none">
+  <span id="updtext"></span>
+  <a id="updlink" href="#" target="_blank" rel="noopener" data-i18n="updGet">Завантажити</a>
+  <button class="updclose" id="updclose" title="Close" aria-label="Close">×</button>
+</div>
 
 <div class="scanbar">
   <div class="scanleft">
-    <button class="iconbtn aboutbtn" id="aboutbtn" title="About" aria-label="About"><img src="logo.png" alt=""></button>
+    <button class="iconbtn aboutbtn" id="aboutbtn" data-i18n-title="aboutTitle" data-i18n-aria="aboutTitle" aria-label="About"><img src="logo.png" alt=""></button>
   </div>
-  <div class="scanc">
-    <span class="mut" id="scaninfo" data-i18n="scanning">сканування…</span>
-    <button class="iconbtn" id="showscan" data-i18n="show">Показати</button>
-  </div>
-  <div class="scanright">
-    <select class="langsel themesel" id="theme" title="Theme">
-      <option value="auto" data-i18n="themeAuto">Авто</option>
-      <option value="dark" data-i18n="themeDark">Темна</option>
-      <option value="light" data-i18n="themeLight">Світла</option>
-    </select>
-    <select class="langsel" id="lang" title="Language">
-      <option value="uk">UA</option>
-      <option value="en">EN</option>
-      <option value="de">DE</option>
-    </select>
-    <button class="iconbtn gear" id="settings" title="Settings">⚙</button>
+  <button class="iconbtn menu-btn" id="menubtn" aria-controls="scanmenu" aria-expanded="false"
+          data-i18n-title="menu" data-i18n-aria="menu" aria-label="Menu" title="Menu">☰</button>
+  <div class="scanmenu" id="scanmenu">
+    <div class="scanright">
+      <select class="langsel themesel" id="theme" title="Theme">
+        <option value="auto" data-i18n="themeAuto">Авто</option>
+        <option value="dark" data-i18n="themeDark">Темна</option>
+        <option value="light" data-i18n="themeLight">Світла</option>
+      </select>
+      <select class="langsel" id="lang" title="Language">
+        <option value="uk">UA</option>
+        <option value="en">EN</option>
+        <option value="de">DE</option>
+      </select>
+      <button class="iconbtn gear" id="settings" title="Settings" data-i18n-title="settings" data-i18n-aria="settings">⚙</button>
+    </div>
+    <div class="menulist">
+      <button type="button" class="menuitem" id="menusettings">
+        <span class="mi-ic">⚙</span><span data-i18n="settings">Налаштування</span>
+      </button>
+      <div class="menugroup">
+        <div class="menutitle" data-i18n="theme">Тема</div>
+        <label class="menuradio"><input type="radio" name="theme" value="auto"><span data-i18n="themeAuto">Авто</span></label>
+        <label class="menuradio"><input type="radio" name="theme" value="dark"><span data-i18n="themeDark">Темна</span></label>
+        <label class="menuradio"><input type="radio" name="theme" value="light"><span data-i18n="themeLight">Світла</span></label>
+      </div>
+      <div class="menugroup">
+        <div class="menutitle" data-i18n="language">Мова</div>
+        <label class="menuradio"><input type="radio" name="lang" value="uk"><span>Українська</span></label>
+        <label class="menuradio"><input type="radio" name="lang" value="en"><span>English</span></label>
+        <label class="menuradio"><input type="radio" name="lang" value="de"><span>Deutsch</span></label>
+      </div>
+    </div>
   </div>
 </div>
 
 <div class="chips" id="chips"></div>
 
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
 <header>
   <h1><span id="dot" class="dot"></span><span id="name">Power Peasant</span></h1>
+  <span class="spinner tiny" id="statuspin" hidden aria-hidden="true"></span>
   <span class="mut" id="status"></span>
-  <button class="iconbtn" id="edit" style="display:none">✎ <span data-i18n="edit">Редагувати</span></button>
-  <button class="iconbtn danger" id="remove" style="display:none">✕ <span data-i18n="remove">Прибрати</span></button>
+  <button class="iconbtn" id="edit" style="display:none" data-i18n-title="edit" data-i18n-aria="edit">✎ <span data-i18n="edit">Редагувати</span></button>
+  <button class="iconbtn danger" id="remove" style="display:none" data-i18n-title="remove" data-i18n-aria="remove">✕ <span data-i18n="remove">Прибрати</span></button>
 </header>
 
 <div class="grid">
@@ -61,42 +93,35 @@
 
 <section>
   <div class="toolbar">
-    <div class="seg" id="metrics">
+    <div class="seg" id="metrics" role="group" aria-label="Metric">
       <button data-m="cells" class="on" data-i18n="cells">Комірки</button>
       <button data-m="pack" data-i18n="packTab">Пакет</button>
       <button data-m="current" data-i18n="current">Струм</button>
       <button data-m="soc">SOC</button>
     </div>
-    <select class="stylesel" id="chartstyle" title="Chart style">
-      <option value="line" data-i18n="stLine">Лінія</option>
-      <option value="area" data-i18n="stArea">Площа</option>
-      <option value="step" data-i18n="stStep">Східці</option>
-      <option value="bars" data-i18n="stBars">Стовпці</option>
-      <option value="dots" data-i18n="stDots">Точки</option>
-    </select>
-    <div class="winwrap">
-      <select class="stylesel" id="windowsel" title="Time window">
-        <option value="300" data-i18n="w5">5 хв</option>
-        <option value="600" data-i18n="w10">10 хв</option>
-        <option value="1800" data-i18n="w30">30 хв</option>
-        <option value="3600" data-i18n="w1h">1 г</option>
-        <option value="21600" data-i18n="w6h">6 г</option>
-        <option value="86400" data-i18n="w24h">24 г</option>
-        <option value="604800" data-i18n="w7d">7 д</option>
-        <option value="2592000" data-i18n="w30d">30 д</option>
-        <option value="7776000" data-i18n="w90d">90 д</option>
-        <option value="15552000" data-i18n="w180d">180 д</option>
-        <option value="31536000" data-i18n="w1y">1 р</option>
-        <option value="63072000" data-i18n="w2y">2 р</option>
-        <option value="0" data-i18n="wAll">Все</option>
-      </select>
-      <span class="mut" id="rangeinfo"></span>
+    <div class="toolbar-right">
+      <div class="seg iconseg" id="chartstyle" role="group" aria-label="Chart style"></div>
+      <div class="winbar">
+        <div class="seg winseg" id="winquick" role="group" aria-label="Time window"></div>
+        <select class="stylesel" id="winmore" aria-label="More windows"></select>
+        <select class="stylesel winall" id="winall" aria-label="Time window"></select>
+      </div>
+      <button class="iconbtn mini" id="zoomreset" hidden data-i18n-title="zoomReset" data-i18n-aria="zoomReset" aria-label="Reset zoom">↺</button>
     </div>
+  </div>
+  <div class="chart-status">
+    <span class="mut" id="rangeinfo"></span>
+    <span class="freshness" id="freshness"></span>
   </div>
   <div class="chart-card" id="chartcard">
     <canvas id="chart"></canvas>
     <div class="tip" id="tip"></div>
+    <div class="chart-hint" data-i18n="chartHint"></div>
     <div class="chart-empty" id="empty" style="display:none"></div>
+    <div class="chart-busy" id="chartbusy" aria-live="polite">
+      <span class="spinner" aria-hidden="true"></span>
+      <span id="chartbusytext"></span>
+    </div>
   </div>
   <div class="legend mut" id="legend"></div>
 </section>
@@ -111,7 +136,7 @@
 <div class="grid">
   <div class="card"><div class="k" data-i18n="soh">SOH</div><div class="v"><span id="soh">--</span><small>%</small></div></div>
   <div class="card"><div class="k" data-i18n="cycles">Цикли</div><div class="v" id="cyc">--</div></div>
-  <div class="card"><div class="k" data-i18n="discharged">Розряджено</div><div class="v"><span id="dah">--</span><small>Ah</small></div></div>
+  <div class="card"><div class="k" data-i18n="discharged" data-i18n-title="dischargedTip" title="Накопичувальний лічильник BMS: скільки Ah батарея віддала за весь час роботи">Віддано всього</div><div class="v"><span id="dah">--</span><small>Ah</small></div></div>
   <div class="card"><div class="k" data-i18n="protectFault">Захист / несправність</div><div class="v" style="font-size:17px" id="flags">--</div></div>
 </div>
 
@@ -125,7 +150,10 @@
         <button data-t="air" class="on"></button>
         <button data-t="hist"></button>
       </div>
-      <button class="iconbtn mini" id="clearhist" data-i18n="clearHistory">Очистити історію</button>
+      <div class="scanactions">
+        <button class="iconbtn mini" id="sscan" data-i18n="scanNow">Сканувати</button>
+        <button class="iconbtn mini" id="clearhist" data-i18n="clearHistory">Очистити історію</button>
+      </div>
     </div>
     <div class="tbl" id="scanlist"></div>
     <label class="chkrow" style="margin-top:12px"><input type="checkbox" id="chkOnlyBat">
@@ -155,7 +183,13 @@
   <div class="box">
     <h3 data-i18n="addBatteryTitle">Додати батарею</h3>
     <div class="field"><label data-i18n="search">Пошук</label><input id="bfilter" data-i18n-ph="searchPh"></div>
-    <div class="field"><label data-i18n="available">Доступні</label><div class="mlist" id="blist"></div></div>
+    <div class="field">
+      <div class="fieldhead">
+        <label data-i18n="available">Доступні</label>
+        <button class="iconbtn mini" id="bscan" data-i18n="scanNow">Сканувати</button>
+      </div>
+      <div class="mlist" id="blist"></div>
+    </div>
     <div class="actions"><button id="bcancel" data-i18n="close">Закрити</button></div>
   </div>
 </div>
@@ -169,6 +203,7 @@
       <div class="field"><label data-i18n="colMin">Найнижча комірка</label><input type="color" id="cfgMinColor"></div>
       <div class="field"><label data-i18n="colNormal">Звичайна комірка</label><input type="color" id="cfgNormColor"></div>
       <div class="field"><label data-i18n="colCritical">Критична комірка</label><input type="color" id="cfgCritColor"></div>
+      <div class="field"><label data-i18n="colNegative">Від'ємні значення</label><input type="color" id="cfgNegColor"></div>
       <div class="field full"><label data-i18n="palette">Палітра графіка</label>
         <div id="cfgPaletteList"></div>
         <button class="iconbtn mini" id="cfgPalAdd" type="button" data-i18n="palAdd">＋ Додати колір</button>
@@ -187,21 +222,7 @@
 
       <div class="sec" data-i18n="secChart">Графік</div>
       <div class="field"><label data-i18n="defWindow">Вікно за замовчуванням</label>
-        <select id="cfgWindow">
-          <option value="300" data-i18n="w5"></option>
-          <option value="600" data-i18n="w10"></option>
-          <option value="1800" data-i18n="w30"></option>
-          <option value="3600" data-i18n="w1h"></option>
-          <option value="21600" data-i18n="w6h"></option>
-          <option value="86400" data-i18n="w24h"></option>
-          <option value="604800" data-i18n="w7d"></option>
-          <option value="2592000" data-i18n="w30d"></option>
-          <option value="7776000" data-i18n="w90d"></option>
-          <option value="15552000" data-i18n="w180d"></option>
-          <option value="31536000" data-i18n="w1y"></option>
-          <option value="63072000" data-i18n="w2y"></option>
-          <option value="0" data-i18n="wAll"></option>
-        </select></div>
+        <select id="cfgWindow"></select></div>
 
       <div class="sec" data-i18n="secServer">Сервер</div>
       <div class="field"><label data-i18n="srvPoll">Опитування, с</label><input type="number" step="0.5" id="cfgPoll"></div>
@@ -229,20 +250,36 @@
   </div>
 </div>
 
-<div class="modal" id="amodal">
+<div class="modal" id="offlinemodal">
   <div class="box">
-    <div class="about-head">
+    <h3 data-i18n="connTitle">Немає зв'язку</h3>
+    <p class="mut" data-i18n="connBody">Монітор не відповідає. Перевірте, чи запущений сервер, і спробуйте ще.</p>
+    <div class="actions">
+      <button id="offlinecancel" data-i18n="cancel">Скасувати</button>
+      <button id="offlineretry" class="primary" data-i18n="tryAgain">Спробувати ще</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="amodal">
+  <div class="box aboutbox">
+    <div class="about-top">
       <img class="about-logo" src="logo.png" alt="Power Peasant logo">
-      <div>
+      <div class="about-info">
         <div class="about-name">Power Peasant</div>
         <div class="about-desc" data-i18n="aboutDesc">Неофіційний монітор батарей Power Queen.</div>
+        <div class="about-rows">
+          <div><span data-i18n="aboutVersion">Версія</span><b id="aboutVersion">--</b></div>
+        </div>
+        <div class="about-links">
+          <a id="aboutRepo" href="#" target="_blank" rel="noopener" data-i18n="aboutRepo">GitHub</a>
+        </div>
+        <div class="about-update">
+          <a id="aboutCheck" href="#" data-i18n="checkUpdates">Перевірити оновлення</a>
+          <span id="aboutUpdateStatus" class="mut"></span>
+          <a id="aboutUpdateLink" href="#" target="_blank" rel="noopener" data-i18n="updGet" style="display:none">Завантажити</a>
+        </div>
       </div>
-    </div>
-    <div class="about-rows">
-      <div><span data-i18n="aboutVersion">Версія</span><b id="aboutVersion">--</b></div>
-    </div>
-    <div class="about-links">
-      <a id="aboutRepo" href="#" target="_blank" rel="noopener" data-i18n="aboutRepo">GitHub</a>
     </div>
     <div class="about-funding" id="aboutFunding" style="display:none">
       <div class="about-sub" data-i18n="aboutSupport">Підтримати проєкт</div>
@@ -259,8 +296,12 @@ const fmt = (v,d=2) => (v===null||v===undefined||Number.isNaN(v)) ? '--' : Numbe
 const PALETTE_DEF = ['#58a6ff','#35d07f','#f2a33c','#c792ea','#ef5b5b','#4dd0e1','#f78fb3','#a3e635'];
 let PALETTE = PALETTE_DEF.slice();
 let cfg = null;
+let uiMeta = null;   // /api/meta: the offered windows, styles and metrics
+const VIEW_METRICS = ['cells','pack','current','soc'];
+const VIEW_STYLES = ['line','area','step','bars','dots'];
+let viewSelected = '', viewTimer = null, viewSaving = false, viewDirty = false;
 const T = {critMv:3050, scaleMin:3.00, scaleMax:3.45, dOk:10, dWarn:30, pOk:60, pBad:200};
-const isBatName = n => /^[A-Z]-\d{5}/i.test((n || '').trim());
+const isBatName = n => /^(?:[A-Z]-\d{5}|LT-\d|L-\d|S{1,2}-\d)/i.test((n || '').trim());
 
 function cfgGet(path, fallback){
   let o = cfg;
@@ -279,6 +320,7 @@ function applyConfig(){
   if(c.cellMin) st.setProperty('--org', c.cellMin);
   if(c.cellNormal) st.setProperty('--blu', c.cellNormal);
   if(c.cellCritical) st.setProperty('--red', c.cellCritical);
+  if(c.chartNegative) st.setProperty('--neg', c.chartNegative);
   if(Array.isArray(c.chartPalette) && c.chartPalette.length) PALETTE = c.chartPalette.slice();
   T.critMv = cfgGet('ui.cells.criticalMv', 3050);
   T.scaleMin = cfgGet('ui.cells.scaleMinV', 3.00);
@@ -288,24 +330,119 @@ function applyConfig(){
   T.dWarn = cfgGet('ui.thresholds.cellDeltaWarnMv', 30);
   T.pOk = cfgGet('ui.thresholds.packSpreadOkMv', 60);
   T.pBad = cfgGet('ui.thresholds.packSpreadBadMv', 200);
-  winSec = cfgGet('ui.chart.defaultWindowSec', 600);
-  const winSel = $('windowsel');
-  if(winSel){
-    if(![...winSel.options].some(o => Number(o.value) === winSec)) winSec = 600;
-    winSel.value = String(winSec);
-  }
+  const view = u.view || {};
+  const defWin = cfgGet('ui.chart.defaultWindowSec', 600);
+  const known = w => uiWindows().some(x => Number(x) === Number(w));
+  const wanted = Number.isFinite(Number(view.windowSec)) ? Number(view.windowSec) : defWin;
+  winSec = known(wanted) ? wanted : (known(defWin) ? defWin : 600);
+  if(VIEW_METRICS.includes(view.metric)){ metric = view.metric; lastDeviceMetric = metric; }
+  const style = VIEW_STYLES.includes(view.chartStyle) ? view.chartStyle
+              : (localStorage.getItem('pq_style') || 'line');
+  chartStyle = VIEW_STYLES.includes(style) ? style : 'line';
+  syncWindowControls();
+  syncStyleControls();
+  viewSelected = typeof view.selected === 'string' ? view.selected : '';
+}
+
+// ---- chart controls (built from /api/meta, one source of truth) ----
+const QUICK_WINDOWS = [600, 1800, 3600, 21600, 86400, 0];
+// safety net only when /api/meta is unreachable; normally the server list wins
+const FALLBACK_WINDOWS = [0, 300, 600, 1800, 3600, 21600, 86400, 604800,
+                          2592000, 7776000, 15552000, 31536000, 63072000];
+const STYLE_ICONS = {
+  line:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12l4-6 4 3 4-6"/></svg>',
+  area:'<svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 12l4-6 4 3 4-6v11H2z"/></svg>',
+  step:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 11h4V7h4v3h4"/></svg>',
+  bars:'<svg viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="8" width="2.4" height="6" rx=".6"/><rect x="6.8" y="4" width="2.4" height="10" rx=".6"/><rect x="10.6" y="6" width="2.4" height="8" rx=".6"/></svg>',
+  dots:'<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="11" r="1.6"/><circle cx="7" cy="6" r="1.6"/><circle cx="12.5" cy="10" r="1.6"/></svg>'
+};
+
+function uiWindows(){
+  const list = (uiMeta && Array.isArray(uiMeta.windows) && uiMeta.windows.length)
+    ? uiMeta.windows : FALLBACK_WINDOWS;
+  return list.map(Number);
+}
+
+function uiStyles(){
+  return (uiMeta && Array.isArray(uiMeta.styles) && uiMeta.styles.length)
+    ? uiMeta.styles : VIEW_STYLES;
+}
+
+function syncWindowControls(){
+  let inQuick = false;
+  document.querySelectorAll('#winquick button').forEach(b => {
+    const on = Number(b.dataset.win) === Number(winSec);
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+    if(on) inQuick = true;
+  });
+  const more = $('winmore');
+  if(!more) return;
+  more.value = inQuick ? '' : String(winSec);
+  if(!inQuick && more.value !== String(winSec)) more.value = '';
+  more.classList.toggle('on', !inQuick && !!more.value);
+  const all = $('winall'); if(all) all.value = String(winSec);
+}
+
+function syncStyleControls(){
+  document.querySelectorAll('#chartstyle button').forEach(b => {
+    const on = b.dataset.style === chartStyle;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+}
+
+function syncMetricButtons(){
+  document.querySelectorAll('#metrics button').forEach(b => {
+    const on = b.dataset.m === metric;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+}
+
+function buildChartControls(){
+  const windows = uiWindows().slice().sort((a, b) => (a || Infinity) - (b || Infinity));
+  $('cfgWindow').innerHTML = windows.map(w =>
+    `<option value="${w}">${windowLabel(w)}</option>`).join('');
+  const quick = QUICK_WINDOWS.filter(w => windows.includes(w));
+  $('winquick').innerHTML = quick.map(w =>
+    `<button type="button" data-win="${w}">${windowLabel(w)}</button>`).join('');
+  const rest = windows.filter(w => !quick.includes(w));
+  $('winmore').innerHTML = `<option value="">⋯</option>` + rest.map(w =>
+    `<option value="${w}">${windowLabel(w)}</option>`).join('');
+  $('winall').innerHTML = windows.map(w =>
+    `<option value="${w}">${windowLabel(w)}</option>`).join('');
+  $('winmore').title = t('moreWindows');
+  $('winmore').setAttribute('aria-label', t('moreWindows'));
+  $('chartstyle').innerHTML = uiStyles().map(st => {
+    const name = t('st' + st[0].toUpperCase() + st.slice(1));
+    return `<button type="button" data-style="${st}" title="${name}" aria-label="${name}">${STYLE_ICONS[st] || ''}</button>`;
+  }).join('');
+  syncWindowControls();
+  syncStyleControls();
+}
+
+function setWindow(w){
+  clearZoom();
+  winSec = Number(w) || 0;
+  hover = null; hoverY = null; histError = false;
+  syncWindowControls();
+  if(sel) loadHistory(sel);
+  drawChart();
+  scheduleViewSave();
 }
 
 const STR = {
   uk:{
-    edit:"Редагувати", remove:"Прибрати", show:"Показати", close:"Закрити", cancel:"Скасувати",
-    save:"Зберегти", del:"Видалити", addBat:"Батарея", addGroup:"Група", addDo:"＋ Додати",
+    edit:"Редагувати", remove:"Прибрати", close:"Закрити", cancel:"Скасувати",
+    save:"Зберегти", del:"Видалити", addBat:"Батарея", addGroup:"Група", airBtn:"Етер", addDo:"＋ Додати",
     connect:"＋ Під'єднати", none:"немає",
-    scanning:"сканування…",
-    scanLine:"В етері: {n} пристроїв · BMS: {b} · під'єднано: {c} · скан {time}",
     scanTitle:"Пристрої поблизу",
     tabAir:"В етері ({n})", tabHist:"Історія ({n})", clearHistory:"Очистити історію",
     confirmClear:"Очистити історію знайдених пристроїв?",
+    scanNow:"Сканувати", scanning:"Сканую…", scanDone:"Скан завершено: {n} пристроїв",
+    scanFailed:"Скан не вдався: {err}", added:"Додано: {name}", alreadyAdded:"Уже додано: {name}",
+    addFailed:"Не вдалося додати: {err}",
     thDevice:"Пристрій", thAddr:"Адреса", thStatus:"Статус", thLast:"Востаннє", thCount:"Разів",
     stConnected:"під'єднано", stOffline:"offline", stNew:"нова", stRemoved:"прибрано",
     inAir:"в етері", notInAir:"не в етері", nothingFound:"нічого не знайдено",
@@ -313,7 +450,8 @@ const STR = {
     packVoltage:"Напруга", current:"Струм", currentS:"Струм", power:"Потужність",
     soc:"SOC", timeLeft:"Час", timeToEmpty:"до розряду", timeToFull:"до заряду", dShort:"д",
     soc:"SOC", remaining:"Залишок", fullCapacity:"Повна ємність", cellTemp:"Темп. комірок",
-    mosTemp:"Темп. MOSFET", soh:"SOH", cycles:"Цикли", discharged:"Розряджено",
+    mosTemp:"Темп. MOSFET", soh:"SOH", cycles:"Цикли", discharged:"Віддано всього",
+    dischargedTip:"Накопичувальний лічильник BMS: скільки Ah батарея віддала за весь час роботи. Під час заряду не змінюється.",
     protectFault:"Захист / несправність",
     cells:"Комірки", members:"Елементи", level:"Рівень", voltage:"Напруга",
     battery:"Батарея", temp:"Темп.", deltaCell:"Δ ком.", cellN:"Комірка {n}",
@@ -324,13 +462,21 @@ const STR = {
     balancing:"балансування: {list}", notBalancing:"не балансується",
     parallel:"паралельно", series:"послідовно", pack:"Напруга", packTab:"Напруга",
     windowInfo:"вікно {w} · {n} точок", collecting:"збираю дані…", noData:"немає даних у цьому вікні",
-    w5:"5 хв", w10:"10 хв", w30:"30 хв", w1h:"1 г", w6h:"6 г", w24h:"24 г", w7d:"7 д",
-    w30d:"30 д", w90d:"90 д", w180d:"180 д", w1y:"1 р", w2y:"2 р", wAll:"Все",
-    rangeAll:"Все · з {from} по {to}", rangeStep:"крок {step}", rangeDataFrom:"дані з {from}",
+    noCellData:"немає історії по комірках у цьому вікні", histError:"історія недоступна",
+    freshLive:"наживо", freshArchive:"архів", freshWait:"очікування", cellsGroupHint:"у групи немає окремих комірок",
+    bootStarting:"Запуск…", bootWaiting:"Пошук і підключення батарей…", histLoading:"завантаження історії…",
+    waitingData:"очікування даних…", lastHistory:"немає зв'язку · остання історія до {to}",
+    noLink:"немає зв'язку", tryAgain:"Спробувати ще",
+    connTitle:"Немає зв'язку", connBody:"Монітор не відповідає. Перевірте, чи запущений сервер, і спробуйте ще.",
+    moreWindows:"інші вікна",
+    wAll:"Все",
+    rangeAll:"Все · з {from} по {to}", rangeZoom:"Масштаб · з {from} по {to}", rangeStep:"крок {step}", rangeDataFrom:"дані з {from}", rangeDataTo:"по {to}",
     stLine:"Лінія", stArea:"Площа", stStep:"Східці", stBars:"Стовпці", stDots:"Точки",
-    minShort:"хв", secShort:"с", hourShort:"г",
+    minShort:"хв", secShort:"с", hourShort:"г", dayShort:"д", yearShort:"р",
     agoS:"{n} с тому", agoM:"{n} хв тому", agoH:"{n} г тому", agoD:"{n} д тому",
     liveStatus:"оновлено {time} · опитування #{n}",
+    archiveStatus:"{err} · дані {ago}", archiveOnly:"дані {ago}",
+    staleTitle:"Немає зв'язку. Показано останні отримані дані: {time}.",
     grpStatus:"група · {on}/{tot} онлайн{part} · {mode}", partial:" · частково",
     connecting:"з'єднання…", searching:"пошук…", monitorOffline:"монітор офлайн",
     newGroup:"Нова група", editGroup:"Редагувати групу", name:"Назва", namePh:"Наприклад: Банк 12V",
@@ -338,10 +484,14 @@ const STR = {
     optSeries:"Послідовно (напруга сумується)", batteries:"Батареї",
     online:"online", offline:"offline", noDevices:"немає знайдених батарей",
     addBatteryTitle:"Додати батарею", search:"Пошук", searchPh:"ім'я або MAC", available:"Доступні",
-    settings:"Налаштування",
-    aboutTitle:"Про програму", aboutDesc:"Неофіційний монітор LiFePO4-батарей Power Queen.",
+    settings:"Налаштування", menu:"Меню", theme:"Тема", language:"Мова",
+    aboutTitle:"Про програму", aboutDesc:"Неофіційний монітор LiFePO4-батарей Power Queen, Redodo і LiTime.",
     aboutVersion:"Версія", aboutRepo:"Сторінка проекту на github.com", aboutDonate:"Підтримати",
     aboutSupport:"Підтримати проєкт",
+    checkUpdates:"Перевірити оновлення", updChecking:"Перевіряю…",
+    updAvailable:"Доступна версія {v}", updUpToDate:"У вас остання версія",
+    updError:"Не вдалося перевірити оновлення", updDev:"dev-збірка — перевірку вимкнено",
+    updGet:"Завантажити", updBanner:"Доступна нова версія Power Peasant {v}",
     themeAuto:"Авто", themeDark:"Темна", themeLight:"Світла",
     btOff:"Bluetooth вимкнено — увімкніть адаптер, щоб бачити батареї.",
     btNoAdapter:"Bluetooth-адаптер не знайдено. Під'єднайте адаптер.",
@@ -349,6 +499,7 @@ const STR = {
     btError:"Bluetooth недоступний: {msg}",
     secColors:"Кольори", colMax:"Найвища комірка", colMin:"Найнижча комірка",
     colNormal:"Звичайна комірка", colCritical:"Критична комірка",
+    colNegative:"Від'ємні значення",
     palette:"Палітра графіка", palAdd:"＋ Додати колір",
     paletteHint:"Кольори ліній комірок за порядком: комірка 1, 2, … Додавайте й видаляйте кнопками. Якщо кольорів менше, ніж комірок — список повторюється.",
     secCells:"Комірки", scaleMin:"Шкала від, В", scaleMax:"Шкала до, В",
@@ -356,24 +507,29 @@ const STR = {
     secThresholds:"Пороги", dOk:"Δ комірок OK, mV", dWarn:"Δ комірок попередження, mV",
     pOk:"Δ пакетів OK, mV", pBad:"Δ пакетів погано, mV",
     secChart:"Графік", defWindow:"Вікно за замовчуванням",
+    zoomReset:"Скинути масштаб",
+    chartHint:"Протягніть — зум · Shift+протягування — прокрутка · Ctrl+колесо — зум · 2× клік — скинути",
     onlyBatHint:"Приховує телевізори, LED-стрічки, телефони та інші пристрої у списку «В етері».",
-    onlyBatShort:"лише батареї", onlyBatCheck:"Показувати лише батареї",
+    onlyBatCheck:"Показувати лише батареї",
     secServer:"Сервер", srvPoll:"Опитування, с", srvLog:"Запис CSV, с",
     srvHist:"Історія при старті, год",
     srvNote:"Серверні значення застосуються після перезапуску (CLI має пріоритет).",
     ok:"OK",
+    viewSaved:"Збережено",
+    viewSaveFailed:"Не вдалося зберегти",
     confirmRemoveTitle:"Прибрати батарею?",
     confirmRemoveBody:"«{name}» зникне зі списку (її буде видно у скані).\n• з усіх груп її буде виключено\n• історія в CSV залишиться",
     confirmClearTitle:"Очистити історію?",
   },
   en:{
-    edit:"Edit", remove:"Remove", show:"Show", close:"Close", cancel:"Cancel", save:"Save",
-    del:"Delete", addBat:"Battery", addGroup:"Group", addDo:"＋ Add", connect:"＋ Connect", none:"none",
-    scanning:"scanning…",
-    scanLine:"In air: {n} devices · BMS: {b} · connected: {c} · scan {time}",
+    edit:"Edit", remove:"Remove", close:"Close", cancel:"Cancel", save:"Save",
+    del:"Delete", addBat:"Battery", addGroup:"Group", airBtn:"In air", addDo:"＋ Add", connect:"＋ Connect", none:"none",
     scanTitle:"Devices nearby",
     tabAir:"In air ({n})", tabHist:"History ({n})", clearHistory:"Clear history",
     confirmClear:"Clear the discovery history?",
+    scanNow:"Scan", scanning:"Scanning…", scanDone:"Scan complete: {n} devices",
+    scanFailed:"Scan failed: {err}", added:"Added: {name}", alreadyAdded:"Already added: {name}",
+    addFailed:"Could not add: {err}",
     thDevice:"Device", thAddr:"Address", thStatus:"Status", thLast:"Last seen", thCount:"Times",
     stConnected:"connected", stOffline:"offline", stNew:"new", stRemoved:"removed",
     inAir:"in air", notInAir:"not in air", nothingFound:"nothing found",
@@ -381,7 +537,8 @@ const STR = {
     packVoltage:"Voltage", current:"Current", currentS:"Current", power:"Power", soc:"SOC",
     timeLeft:"Time", timeToEmpty:"to empty", timeToFull:"to full", dShort:"d",
     remaining:"Remaining", fullCapacity:"Full capacity", cellTemp:"Cell temp", mosTemp:"MOS temp",
-    soh:"SOH", cycles:"Cycles", discharged:"Discharged", protectFault:"Protection / fault",
+    soh:"SOH", cycles:"Cycles", discharged:"Total discharged", protectFault:"Protection / fault",
+    dischargedTip:"Lifetime counter from the BMS: Ah delivered since the battery was made. It does not change while charging.",
     cells:"Cells", members:"Members", level:"Level", voltage:"Voltage", battery:"Battery",
     temp:"Temp", deltaCell:"Δ cell", cellN:"Cell {n}", deltaVal:"Δ {v} mV", deltaMax:"Δ max {v} mV",
     vSpread:"Δ packs {v} mV",
@@ -390,13 +547,21 @@ const STR = {
     balancing:"balancing: {list}", notBalancing:"not balancing", parallel:"parallel", series:"series",
     pack:"Voltage", packTab:"Voltage", windowInfo:"window {w} · {n} points",
     collecting:"collecting data…", noData:"no data in this window",
-    w5:"5m", w10:"10m", w30:"30m", w1h:"1h", w6h:"6h", w24h:"24h", w7d:"7d",
-    w30d:"30d", w90d:"90d", w180d:"180d", w1y:"1y", w2y:"2y", wAll:"All",
-    rangeAll:"All · from {from} to {to}", rangeStep:"step {step}", rangeDataFrom:"data from {from}",
+    noCellData:"no per-cell history in this window", histError:"history unavailable",
+    freshLive:"live", freshArchive:"archive", freshWait:"waiting", cellsGroupHint:"groups have no per-cell data",
+    bootStarting:"Starting…", bootWaiting:"Looking for and connecting batteries…", histLoading:"loading history…",
+    waitingData:"waiting for data…", lastHistory:"no link · last history at {to}",
+    noLink:"no link", tryAgain:"Try again",
+    connTitle:"No connection", connBody:"The monitor is not responding. Check that the server is running and try again.",
+    moreWindows:"more windows",
+    wAll:"All",
+    rangeAll:"All · from {from} to {to}", rangeZoom:"Zoom · from {from} to {to}", rangeStep:"step {step}", rangeDataFrom:"data from {from}", rangeDataTo:"to {to}",
     stLine:"Line", stArea:"Area", stStep:"Step", stBars:"Bars", stDots:"Dots",
-    minShort:"min", secShort:"s", hourShort:"h",
+    minShort:"min", secShort:"s", hourShort:"h", dayShort:"d", yearShort:"y",
     agoS:"{n} s ago", agoM:"{n} min ago", agoH:"{n} h ago", agoD:"{n} d ago",
     liveStatus:"update {time} · poll #{n}",
+    archiveStatus:"{err} · data {ago}", archiveOnly:"data {ago}",
+    staleTitle:"No link. Showing the last received data: {time}.",
     grpStatus:"group · {on}/{tot} online{part} · {mode}", partial:" · partial",
     connecting:"connecting…", searching:"searching…", monitorOffline:"monitor offline",
     newGroup:"New group", editGroup:"Edit group", name:"Name", namePh:"e.g. Bank 12V",
@@ -404,10 +569,14 @@ const STR = {
     optSeries:"Series (voltage adds up)", batteries:"Batteries",
     online:"online", offline:"offline", noDevices:"no batteries found",
     addBatteryTitle:"Add battery", search:"Search", searchPh:"name or MAC", available:"Available",
-    settings:"Settings",
-    aboutTitle:"About", aboutDesc:"Unofficial monitor for Power Queen LiFePO4 batteries.",
+    settings:"Settings", menu:"Menu", theme:"Theme", language:"Language",
+    aboutTitle:"About", aboutDesc:"Unofficial monitor for Power Queen, Redodo and LiTime LiFePO4 batteries.",
     aboutVersion:"Version", aboutRepo:"Project page on github.com", aboutDonate:"Donate",
     aboutSupport:"Support the project",
+    checkUpdates:"Check for updates", updChecking:"Checking…",
+    updAvailable:"Version {v} is available", updUpToDate:"You have the latest version",
+    updError:"Update check failed", updDev:"dev build — updates disabled",
+    updGet:"Download", updBanner:"Power Peasant {v} is available",
     themeAuto:"Auto", themeDark:"Dark", themeLight:"Light",
     btOff:"Bluetooth is off — enable the adapter to see batteries.",
     btNoAdapter:"No Bluetooth adapter found. Connect an adapter.",
@@ -415,6 +584,7 @@ const STR = {
     btError:"Bluetooth unavailable: {msg}",
     secColors:"Colors", colMax:"Highest cell", colMin:"Lowest cell",
     colNormal:"Normal cell", colCritical:"Critical cell",
+    colNegative:"Negative values",
     palette:"Chart palette", palAdd:"＋ Add color",
     paletteHint:"Line colors for the cell chart, in order: cell 1, 2, … Add or remove them with the buttons. If there are fewer colors than cells, the list repeats.",
     secCells:"Cells", scaleMin:"Scale from, V", scaleMax:"Scale to, V",
@@ -422,25 +592,30 @@ const STR = {
     secThresholds:"Thresholds", dOk:"Cell Δ OK, mV", dWarn:"Cell Δ warning, mV",
     pOk:"Pack Δ OK, mV", pBad:"Pack Δ bad, mV",
     secChart:"Chart", defWindow:"Default window",
+    zoomReset:"Reset zoom",
+    chartHint:"Drag: zoom · Shift+drag: pan · Ctrl+wheel: zoom · 2×click: reset",
     onlyBatHint:"Hides TVs, LED strips, phones and other devices in the “In air” list.",
-    onlyBatShort:"batteries only", onlyBatCheck:"Show only batteries",
+    onlyBatCheck:"Show only batteries",
     secServer:"Server", srvPoll:"Poll interval, s", srvLog:"CSV row interval, s",
     srvHist:"History on start, h",
     srvNote:"Server values apply after a restart (CLI takes precedence).",
     ok:"OK",
+    viewSaved:"Saved",
+    viewSaveFailed:"Could not save",
     confirmRemoveTitle:"Remove battery?",
     confirmRemoveBody:"“{name}” will disappear from the list (still visible in scan).\n• removed from all groups\n• CSV history is kept",
     confirmClearTitle:"Clear history?",
   },
   de:{
-    edit:"Bearbeiten", remove:"Entfernen", show:"Anzeigen", close:"Schließen", cancel:"Abbrechen",
-    save:"Speichern", del:"Löschen", addBat:"Batterie", addGroup:"Gruppe", addDo:"＋ Hinzufügen",
+    edit:"Bearbeiten", remove:"Entfernen", close:"Schließen", cancel:"Abbrechen",
+    save:"Speichern", del:"Löschen", addBat:"Batterie", addGroup:"Gruppe", airBtn:"Im Funk", addDo:"＋ Hinzufügen",
     connect:"＋ Verbinden", none:"keine",
-    scanning:"Scannen…",
-    scanLine:"Im Funk: {n} Geräte · BMS: {b} · verbunden: {c} · Scan {time}",
     scanTitle:"Geräte in der Nähe",
     tabAir:"Im Funk ({n})", tabHist:"Verlauf ({n})", clearHistory:"Verlauf löschen",
     confirmClear:"Verlauf der gefundenen Geräte löschen?",
+    scanNow:"Scannen", scanning:"Scanne…", scanDone:"Scan abgeschlossen: {n} Geräte",
+    scanFailed:"Scan fehlgeschlagen: {err}", added:"Hinzugefügt: {name}",
+    alreadyAdded:"Bereits hinzugefügt: {name}", addFailed:"Hinzufügen fehlgeschlagen: {err}",
     thDevice:"Gerät", thAddr:"Adresse", thStatus:"Status", thLast:"Zuletzt", thCount:"Male",
     stConnected:"verbunden", stOffline:"offline", stNew:"neu", stRemoved:"entfernt",
     inAir:"im Funk", notInAir:"nicht im Funk", nothingFound:"nichts gefunden",
@@ -448,7 +623,8 @@ const STR = {
     packVoltage:"Spannung", current:"Strom", currentS:"Strom", power:"Leistung", soc:"SOC",
     timeLeft:"Zeit", timeToEmpty:"bis leer", timeToFull:"bis voll", dShort:"T",
     remaining:"Rest", fullCapacity:"Volle Kapazität", cellTemp:"Zellentemp.", mosTemp:"MOS-Temp.",
-    soh:"SOH", cycles:"Zyklen", discharged:"Entladen", protectFault:"Schutz / Fehler",
+    soh:"SOH", cycles:"Zyklen", discharged:"Gesamt entladen", protectFault:"Schutz / Fehler",
+    dischargedTip:"Lebensdauer-Zähler des BMS: abgegebene Ah seit der Herstellung. Ändert sich beim Laden nicht.",
     cells:"Zellen", members:"Mitglieder", level:"Niveau", voltage:"Spannung", battery:"Batterie",
     temp:"Temp", deltaCell:"Δ Zelle", cellN:"Zelle {n}", deltaVal:"Δ {v} mV", deltaMax:"Δ max {v} mV",
     vSpread:"Δ Packs {v} mV",
@@ -458,13 +634,21 @@ const STR = {
     parallel:"parallel", series:"seriell", pack:"Spannung", packTab:"Spannung",
     windowInfo:"Fenster {w} · {n} Punkte", collecting:"Daten werden gesammelt…",
     noData:"keine Daten in diesem Zeitraum",
-    w5:"5 Min", w10:"10 Min", w30:"30 Min", w1h:"1 Std", w6h:"6 Std", w24h:"24 Std", w7d:"7 Tage",
-    w30d:"30 Tage", w90d:"90 Tage", w180d:"180 Tage", w1y:"1 Jahr", w2y:"2 Jahre", wAll:"Alle",
-    rangeAll:"Alle · von {from} bis {to}", rangeStep:"Schritt {step}", rangeDataFrom:"Daten ab {from}",
+    noCellData:"keine Zellspannungs-Historie in diesem Zeitraum", histError:"Verlauf nicht verfügbar",
+    freshLive:"live", freshArchive:"Archiv", freshWait:"Warten", cellsGroupHint:"Gruppen haben keine Zellspannungen",
+    bootStarting:"Start…", bootWaiting:"Suche und verbinde Batterien…", histLoading:"Verlauf wird geladen…",
+    waitingData:"warten auf Daten…", lastHistory:"keine Verbindung · letzter Verlauf bis {to}",
+    noLink:"keine Verbindung", tryAgain:"Erneut versuchen",
+    connTitle:"Keine Verbindung", connBody:"Der Monitor antwortet nicht. Prüfen Sie, ob der Server läuft, und versuchen Sie es erneut.",
+    moreWindows:"weitere Zeitfenster",
+    wAll:"Alle",
+    rangeAll:"Alle · von {from} bis {to}", rangeZoom:"Zoom · von {from} bis {to}", rangeStep:"Schritt {step}", rangeDataFrom:"Daten ab {from}", rangeDataTo:"bis {to}",
     stLine:"Linie", stArea:"Fläche", stStep:"Stufen", stBars:"Balken", stDots:"Punkte",
-    minShort:"Min", secShort:"s", hourShort:"Std",
+    minShort:"Min", secShort:"s", hourShort:"Std", dayShort:"T", yearShort:"J",
     agoS:"vor {n} s", agoM:"vor {n} Min", agoH:"vor {n} Std", agoD:"vor {n} T",
     liveStatus:"Aktualisiert {time} · Abfrage #{n}",
+    archiveStatus:"{err} · Daten {ago}", archiveOnly:"Daten {ago}",
+    staleTitle:"Keine Verbindung. Zuletzt empfangene Daten: {time}.",
     grpStatus:"Gruppe · {on}/{tot} online{part} · {mode}", partial:" · teilweise",
     connecting:"Verbinde…", searching:"Suche…", monitorOffline:"Monitor offline",
     newGroup:"Neue Gruppe", editGroup:"Gruppe bearbeiten", name:"Name", namePh:"z. B. Bank 12V",
@@ -473,10 +657,14 @@ const STR = {
     online:"online", offline:"offline", noDevices:"keine Batterien gefunden",
     addBatteryTitle:"Batterie hinzufügen", search:"Suche", searchPh:"Name oder MAC",
     available:"Verfügbar",
-    settings:"Einstellungen",
-    aboutTitle:"Über", aboutDesc:"Inoffizieller Monitor für Power-Queen-LiFePO4-Batterien.",
+    settings:"Einstellungen", menu:"Menü", theme:"Design", language:"Sprache",
+    aboutTitle:"Über", aboutDesc:"Inoffizieller Monitor für Power-Queen-, Redodo- und LiTime-LiFePO4-Batterien.",
     aboutVersion:"Version", aboutRepo:"Projektseite auf github.com", aboutDonate:"Spenden",
     aboutSupport:"Projekt unterstützen",
+    checkUpdates:"Nach Updates suchen", updChecking:"Prüfe…",
+    updAvailable:"Version {v} ist verfügbar", updUpToDate:"Sie haben die neueste Version",
+    updError:"Update-Prüfung fehlgeschlagen", updDev:"dev-Build — Updates deaktiviert",
+    updGet:"Herunterladen", updBanner:"Power Peasant {v} ist verfügbar",
     themeAuto:"Auto", themeDark:"Dunkel", themeLight:"Hell",
     btOff:"Bluetooth ist aus — schalten Sie den Adapter ein.",
     btNoAdapter:"Kein Bluetooth-Adapter gefunden. Adapter anschließen.",
@@ -484,6 +672,7 @@ const STR = {
     btError:"Bluetooth nicht verfügbar: {msg}",
     secColors:"Farben", colMax:"Höchste Zelle", colMin:"Niedrigste Zelle",
     colNormal:"Normale Zelle", colCritical:"Kritische Zelle",
+    colNegative:"Negative Werte",
     palette:"Diagrammpalette", palAdd:"＋ Farbe hinzufügen",
     paletteHint:"Linienfarben für das Zellen-Diagramm, der Reihe nach: Zelle 1, 2, … Mit den Knöpfen hinzufügen/entfernen. Bei weniger Farben als Zellen wiederholt sich die Liste.",
     secCells:"Zellen", scaleMin:"Skala von, V", scaleMax:"Skala bis, V",
@@ -491,12 +680,16 @@ const STR = {
     secThresholds:"Schwellen", dOk:"Zellen-Δ OK, mV", dWarn:"Zellen-Δ Warnung, mV",
     pOk:"Pack-Δ OK, mV", pBad:"Pack-Δ schlecht, mV",
     secChart:"Diagramm", defWindow:"Standardfenster",
+    zoomReset:"Zoom zurücksetzen",
+    chartHint:"Ziehen: Zoom · Umschalt+Ziehen: Pan · Strg+Mausrad: Zoom · 2×: Reset",
     onlyBatHint:"Blendet TVs, LED-Streifen, Telefone und andere Geräte in der Liste „Im Funk“ aus.",
-    onlyBatShort:"nur Batterien", onlyBatCheck:"Nur Batterien anzeigen",
+    onlyBatCheck:"Nur Batterien anzeigen",
     secServer:"Server", srvPoll:"Abfrageintervall, s", srvLog:"CSV-Intervall, s",
     srvHist:"Verlauf beim Start, Std",
     srvNote:"Serverwerte gelten nach einem Neustart (CLI hat Vorrang).",
     ok:"OK",
+    viewSaved:"Gespeichert",
+    viewSaveFailed:"Speichern fehlgeschlagen",
     confirmRemoveTitle:"Batterie entfernen?",
     confirmRemoveBody:"„{name}“ verschwindet aus der Liste (bleibt im Scan sichtbar).\n• wird aus allen Gruppen entfernt\n• CSV-Verlauf bleibt erhalten",
     confirmClearTitle:"Verlauf löschen?",
@@ -513,9 +706,12 @@ function t(k, vars){
 function applyStatic(){
   document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
+  document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
   document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); });
   document.documentElement.lang = lang;
   const ls = $('lang'); if(ls) ls.value = lang;
+  document.querySelectorAll('input[name=lang]').forEach(r => { r.checked = r.value === lang; });
 }
 
 let themePref = localStorage.getItem('pq_theme') || 'auto';
@@ -527,6 +723,7 @@ function resolvedTheme(){
 function applyTheme(){
   document.documentElement.setAttribute('data-theme', resolvedTheme());
   const sel = $('theme'); if(sel) sel.value = themePref;
+  document.querySelectorAll('input[name=theme]').forEach(r => { r.checked = r.value === themePref; });
 }
 function onThemeChange(){
   applyTheme();
@@ -539,8 +736,84 @@ if(themeMq){
 }
 
 let devices = [], groups = [], sel = null, metric = 'cells', winSec = 600;
+let lastDeviceMetric = 'cells';   // remember the tab used for batteries, not groups
 let chartStyle = 'line';
-let hist = {}, histMeta = {}, hover = null, geom = null, editing = null;
+let hist = {}, histMeta = {}, hover = null, hoverY = null, geom = null, editing = null;
+let histError = false;
+let histLoading = {};          // id -> number of in-flight history requests
+let zoom = null, zoomBase = null, dragSel = null, panning = null, zoomTimer = null;
+const histReq = {}, histAbort = {};   // id -> request generation / AbortController
+
+// ---- chart zoom: server-side time range --------------------------------
+function syncZoomButton(){ $('zoomreset').hidden = !zoom; }
+
+function clearZoom(){
+  clearTimeout(zoomTimer);
+  zoom = null; zoomBase = null; dragSel = null; panning = null;
+  if($('chart')) $('chart').style.cursor = '';
+  syncZoomButton();
+}
+
+function resetZoom(){
+  if(!zoom) return;
+  clearZoom();
+  hover = null; hoverY = null;
+  if(sel) loadHistory(sel);
+  drawChart();
+}
+
+function scheduleZoomLoad(){
+  clearTimeout(zoomTimer);
+  zoomTimer = setTimeout(() => { if(sel) loadHistory(sel); }, 150);
+}
+
+function plotTime(x, g){
+  const left = g.P.l, right = g.W - g.P.r;
+  const k = Math.max(0, Math.min(1, (x - left) / Math.max(1, right - left)));
+  return g.t0 + k * (g.t1 - g.t0);
+}
+
+function inPlot(x, g){ return x >= g.P.l && x <= g.W - g.P.r; }
+
+function setZoom(a, b){
+  if(!geom || !(b > a)) return;
+  if(!zoomBase){
+    // pan and zoom-out may roam the whole stored history when it is known,
+    // otherwise they stay inside the range that is currently on screen
+    const known = histMeta[sel] && histMeta[sel].bounds;
+    zoomBase = (known && Number.isFinite(known.from) && Number.isFinite(known.to)
+                && known.to > known.from)
+      ? {from: known.from, to: known.to}
+      : {from: geom.t0, to: geom.t1};
+  }
+  const full = zoomBase.to - zoomBase.from;
+  if(full <= 0) return;
+  const step = (histMeta[sel] && histMeta[sel].step) || 0;
+  const span = Math.min(Math.max(b - a, Math.max(60, step * 3)), full);
+  let from = a, to = a + span;
+  // a window that reaches the newest sample follows incoming data instead of
+  // freezing; windows over older history stay fixed
+  const bounds = histMeta[sel] && histMeta[sel].bounds;
+  const newest = (bounds && Number.isFinite(bounds.to)) ? bounds.to : null;
+  const live = newest !== null && to >= newest - Math.max(10, step);
+  if(live){
+    zoomBase.to = Math.max(zoomBase.to, newest);
+    from = newest - span; to = newest;
+  }
+  if(to > zoomBase.to){ to = zoomBase.to; from = to - span; }
+  if(from < zoomBase.from){ from = zoomBase.from; to = from + span; }
+  if(!zoom && Math.abs(from - geom.t0) < 1 && Math.abs(to - geom.t1) < 1){
+    drawChart(); return;      // already showing this range, nothing to zoom
+  }
+  if(span >= full - 1e-6){ resetZoom(); return; }
+  zoom = {from, to, live};
+  syncZoomButton();
+  hover = null; hoverY = null;
+  drawChart();
+  scheduleZoomLoad();
+}
+let booted = false, bootCancelled = false, bootTimer = null, serverDown = false;
+let bootWaiting = false, bootWaitTimer = null, bootStartTs = 0;
 let scan = {ts:0, items:[], seen:[]}, scanRenderedTs = -1, scanMode = 'air';
 let battTs = -1;
 let bt = null;
@@ -549,80 +822,380 @@ function items(){ return groups.concat(devices); }
 function cur(){ return items().find(x => x.id === sel); }
 function isGroup(x){ return !!x && x.kind === 'group'; }
 
+// single source of truth for live/connecting/offline states
+function hasData(x){
+  return !!(x && x.data &&
+            (x.data.pack_mv !== undefined || x.data.soc !== undefined));
+}
+function isOnline(x){
+  if(serverDown) return false;
+  return !!(x && x.connected && hasData(x));
+}
+function connState(x){
+  if(!x) return 'none';
+  if(serverDown) return 'offline';
+  if(isOnline(x)) return 'live';
+  if(x.kind === 'group' && x.data && x.data.members_total > 0 && !x.data.online) return 'offline';
+  const err = x.error;
+  if(err && !/^(starting|scanning|connecting)/.test(String(err))) return 'offline';
+  return 'connecting';
+}
+function archiveText(x, err){
+  if(!x || !x.updated) return err || t('noLink');
+  const age = ago(x.updated);
+  return err ? t('archiveStatus', {err, ago:age}) : t('archiveOnly', {ago:age});
+}
+function deviceMeta(x){
+  if(!x) return '';
+  return [x.error_detail, x.bms_version ? `BMS ${x.bms_version}` : '',
+          x.bms_hardware || ''].filter(Boolean).join('\n');
+}
+function archiveTitle(x){
+  if(!x || !x.updated) return '';
+  const time = new Date(x.updated * 1000).toLocaleString();
+  const meta = deviceMeta(x);
+  return t('staleTitle', {time}) + (meta ? '\n' + meta : '');
+}
+function lastStamp(){
+  const m = histMeta[sel];
+  const to = (m && m.to) || (hist[sel] && hist[sel].length ? hist[sel][hist[sel].length-1][0] : null);
+  return to ? `${fmtDate(to)} ${fmtClock(to)}` : '--';
+}
+function updateBusy(){
+  const x = cur(), st = connState(x);
+  const card = $('chartcard'), busy = $('chartbusy'), text = $('chartbusytext');
+  const pin = $('statuspin');
+  if(pin) pin.hidden = st !== 'connecting';
+  if(!card || !busy || !text) return;
+  const has = !!(hist[sel] && hist[sel].length);
+  const loading = !!histLoading[sel];
+  let msg = '';
+  const archived = hasData(x) && !isOnline(x);
+  if(!x) msg = '';
+  else if(st === 'offline') msg = has ? t('lastHistory', {to: lastStamp()}) : t('noData');
+  else if(loading) msg = t('histLoading');
+  else if(histError) msg = t('histError');
+  else if(st === 'connecting') msg = (archived && has) ? t('lastHistory', {to: lastStamp()}) : t('connecting');
+  else if(!has) msg = t('waitingData');
+  const show = !!msg;
+  const spinning = st !== 'offline' && !archived && (loading || st === 'connecting');
+  busy.classList.toggle('show', show);
+  // the spinner only runs while something is actually being fetched
+  busy.classList.toggle('static', !spinning);
+  card.classList.toggle('stale', st !== 'live' && has);
+  card.setAttribute('aria-busy', String(spinning));
+  text.textContent = msg;
+  if(show) $('empty').style.display = 'none';
+}
+
+function applyData(s){
+  const prev = sel;
+  devices = s.devices || [];
+  groups = (s.groups || []).map(g => ({...g, kind:'group'}));
+  if(s.scan) scan = s.scan;
+  bt = s.bluetooth || null;
+  if(!sel || !items().some(x => x.id === sel)){
+    const all = items();
+    sel = (viewSelected && all.some(x => x.id === viewSelected)) ? viewSelected
+        : (groups.length ? groups[0].id : (devices[0] && devices[0].id));
+  }
+  render();
+  if(sel && sel !== prev){ clearZoom(); loadHistory(sel); }
+  if($('bmodal').classList.contains('show') && scan.ts !== battTs){
+    battTs = scan.ts; renderBatteryList();
+  }
+  if($('smodal').classList.contains('show')) renderScan();
+  bootGate(s);
+}
+
 async function poll(){
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 5000);
   try{
-    const r = await fetch('/api/data', {cache:'no-store'});
+    const r = await fetch('/api/data', {cache:'no-store', signal: ctl.signal});
+    if(!r.ok) throw new Error('HTTP ' + r.status);
     const s = await r.json();
-    devices = s.devices || [];
-    groups = (s.groups || []).map(g => ({...g, kind:'group'}));
-    if(s.scan) scan = s.scan;
-    bt = s.bluetooth || null;
-    if(!sel || !items().some(x => x.id === sel)){
-      sel = groups.length ? groups[0].id : (devices[0] && devices[0].id);
+    const wasDown = serverDown;
+    serverDown = false;
+    if(wasDown) histError = false;
+    applyData(s);
+    if(wasDown){
+      if(sel) loadHistory(sel);
+      if(viewDirty) scheduleViewSave();
     }
-    render();
-    if($('bmodal').classList.contains('show') && scan.ts !== battTs){
-      battTs = scan.ts; renderBatteryList();
-    }
-    if($('smodal').classList.contains('show')) renderScan();
+    if(!booted) startBootTimer();
+    const dlg = $('offlinemodal');
+    if(dlg && dlg.classList.contains('show')) dlg.classList.remove('show');
   }catch(e){
-    $('status').textContent = t('monitorOffline');
-    $('dot').className = 'dot off';
+    if(!serverDown){
+      serverDown = true;
+      render();
+    }
+  }finally{
+    clearTimeout(timer);
   }
 }
 
-async function loadHistory(id){
+function hideBoot(){
+  const mask = $('bootmask'); if(!mask) return;
+  mask.classList.add('hide');
+  setTimeout(() => mask.classList.add('done'), 260);
+}
+
+// ---- boot gate: keep the mask up while there is still nothing to show -----
+function bootContent(s){
+  const all = ((s && s.devices) || []).concat((s && s.groups) || []);
+  return {
+    any: all.length > 0,
+    live: all.some(x => x && x.data &&
+      (x.data.pack_mv !== undefined || x.data.soc !== undefined))
+  };
+}
+
+function finishBoot(){
+  if(booted) return;
+  booted = true;
+  bootCancelled = false;
+  bootWaiting = false;
+  clearTimeout(bootTimer);
+  clearTimeout(bootWaitTimer);
+  // show the mask at least for a moment, so a cached page cannot flash
+  const wait = Math.max(0, 300 - (performance.now() - bootStartTs));
+  if(wait) setTimeout(hideBoot, wait); else hideBoot();
+}
+
+function waitForBootData(){
+  if(bootWaiting || booted) return;
+  bootWaiting = true;
+  const text = $('boottext');
+  if(text) text.textContent = t('bootWaiting');
+  // never trap the user behind the mask: after this the dashboard shows anyway
+  clearTimeout(bootWaitTimer);
+  bootWaitTimer = setTimeout(finishBoot, 30000);
+}
+
+// The server answered: keep waiting while the first radio scan runs or the first
+// frame of live data is on its way; reveal the dashboard once there is nothing
+// left to wait for (no batteries at all, or the first values arrived).
+function bootGate(s){
+  if(booted) return;
+  const c = bootContent(s);
+  // `starting` covers the first radio scan; a cold server also gets a grace
+  // window for the first BLE connection, but a later page reload shows the
+  // dashboard immediately even if every battery is currently offline.
+  const coldStart = Number(s.uptime) < 90;
+  if(s.starting || (coldStart && c.any && !c.live)) waitForBootData();
+  else finishBoot();
+}
+
+function showBootError(){
+  const mask = $('bootmask');
+  if(mask){ mask.classList.add('hide','done'); }
+  const dlg = $('offlinemodal'); if(dlg) dlg.classList.add('show');
+}
+
+function startBootTimer(){
+  clearTimeout(bootTimer);
+  bootTimer = setTimeout(() => { if(!booted) showBootError(); }, 10000);
+}
+
+function bootRetry(){
+  const dlg = $('offlinemodal'); if(dlg) dlg.classList.remove('show');
+  const mask = $('bootmask');
+  if(mask) mask.classList.remove('hide','done');
+  const text = $('boottext'); if(text) text.textContent = t('bootStarting');
+  bootCancelled = false;
+  bootWaiting = false;
+  clearTimeout(bootWaitTimer);
+  startBootTimer();
+  poll();
+}
+
+function bootCancel(){
+  bootCancelled = true;
+  bootWaiting = false;
+  clearTimeout(bootTimer);
+  clearTimeout(bootWaitTimer);
+  const dlg = $('offlinemodal'); if(dlg) dlg.classList.remove('show');
+}
+
+async function loadHistory(id, silent){
   if(!id) return;
-  const win = winSec;
+  const gen = histReq[id] = (histReq[id] || 0) + 1;
+  if(histAbort[id]) histAbort[id].abort();
+  const ctl = histAbort[id] = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 8000);
+  const z = zoom;
+  if(z && z.live){
+    // slide the window with the newest sample so the chart keeps moving
+    const last = histMeta[id] && histMeta[id].bounds;
+    if(last && Number.isFinite(last.to) && last.to > z.to + 0.5){
+      const span = z.to - z.from;
+      z.from = last.to - span; z.to = last.to;
+      if(zoomBase) zoomBase.to = Math.max(zoomBase.to, last.to);
+    }
+  }
+  const range = z ? `from=${Math.round(z.from)}&to=${Math.round(z.to)}`
+                  : `window=${winSec}`;
+  if(!silent){
+    histLoading[id] = (histLoading[id] || 0) + 1;
+    if(id === sel) updateBusy();
+  }
   try{
-    const r = await fetch(`/api/history?id=${encodeURIComponent(id)}&window=${win}`, {cache:'no-store'});
+    const r = await fetch(`/api/history?id=${encodeURIComponent(id)}&${range}`,
+                          {cache:'no-store', signal: ctl.signal});
     const h = await r.json();
-    if(id === sel && win !== winSec) return;
+    if(gen !== histReq[id]) return;          // a newer range/selection won
     hist[id] = h.points || [];
-    histMeta[id] = {from: h.from || null, to: h.to || null, step: Number(h.step) || 0};
-    if(id === sel){ renderRange(); drawChart(); }
-  }catch(e){}
+    histMeta[id] = {from: h.from || null, to: h.to || null,
+                    step: Number(h.step) || 0, zoomed: !!zoom,
+                    bounds: (h.bounds && Number.isFinite(h.bounds.from)
+                             && Number.isFinite(h.bounds.to)) ? h.bounds : null};
+    if(id === sel){ histError = false; renderRange(); drawChart(); updateBusy(); }
+  }catch(e){
+    if(!silent && id === sel && gen === histReq[id]){ histError = true; renderRange(); }
+  }finally{
+    clearTimeout(timer);
+    if(histAbort[id] === ctl) histAbort[id] = null;
+    if(!silent){
+      histLoading[id] = Math.max(0, (histLoading[id] || 1) - 1);
+      if(id === sel) updateBusy();
+    }
+  }
+}
+
+// single source of truth for timestamps shown in the chart and range labels
+function fmtDate(ts, forceYear){
+  const d = new Date(ts * 1000), now = new Date();
+  const p = n => String(n).padStart(2, '0');
+  const date = `${p(d.getDate())}.${p(d.getMonth() + 1)}`;
+  return (forceYear || d.getFullYear() !== now.getFullYear())
+    ? `${date}.${d.getFullYear()}` : date;
+}
+
+function fmtClock(ts, seconds){
+  const d = new Date(ts * 1000);
+  const p = n => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}` + (seconds ? `:${p(d.getSeconds())}` : '');
 }
 
 function fmtRangeMoment(ts, span, sameDay){
-  const d = new Date(ts * 1000), now = new Date();
-  const p = n => String(n).padStart(2, '0');
-  const time = `${p(d.getHours())}:${p(d.getMinutes())}`;
+  const time = fmtClock(ts);
   if(sameDay && span <= 86400) return time;
-  const date = `${p(d.getDate())}.${p(d.getMonth() + 1)}`;
-  const full = d.getFullYear() === now.getFullYear() ? date : `${date}.${d.getFullYear()}`;
-  return span <= 7 * 86400 ? `${full} ${time}` : full;
+  return span <= 7 * 86400 ? `${fmtDate(ts)} ${time}` : fmtDate(ts);
 }
 
 function fmtStep(sec){
   if(sec < 60) return `${Math.max(1, Math.round(sec))} ${t('secShort')}`;
   if(sec < 3600) return `${Math.max(1, Math.round(sec / 60))} ${t('minShort')}`;
-  const h = sec / 3600;
-  return `${h >= 10 ? Math.round(h) : h.toFixed(1)} ${t('hourShort')}`;
+  const num = v => v >= 10 ? String(Math.round(v))
+                          : (Math.abs(v - Math.round(v)) < 0.05 ? String(Math.round(v)) : v.toFixed(1));
+  if(sec < 86400) return `${num(sec / 3600)} ${t('hourShort')}`;
+  return `${num(sec / 86400)} ${t('dayShort')}`;
+}
+
+function windowLabel(sec){
+  if(!sec) return t('wAll');
+  if(sec < 31536000) return fmtStep(sec);
+  return `${Math.round(sec / 31536000)} ${t('yearShort')}`;
 }
 
 function renderRange(){
-  const el = $('rangeinfo');
-  if(!el) return;
+  const el = $('rangeinfo'), fresh = $('freshness');
+  const clearFresh = () => { if(fresh){ fresh.className = 'freshness'; fresh.textContent = ''; } };
+  if(!el){ clearFresh(); return; }
+  if(serverDown){ el.textContent = t('monitorOffline'); clearFresh(); return; }
+  if(histError){ el.textContent = t('histError'); clearFresh(); return; }
   const m = histMeta[sel];
-  if(!m || !m.from || !m.to){ el.textContent = ''; return; }
+  if(!m || !m.from || !m.to){ el.textContent = ''; clearFresh(); return; }
   const parts = [];
-  if(!winSec){
+  if(m.zoomed || !winSec){
     const span = m.to - m.from;
     const sameDay = new Date(m.from * 1000).toDateString() === new Date(m.to * 1000).toDateString();
-    parts.push(t('rangeAll', {
+    parts.push(t(m.zoomed ? 'rangeZoom' : 'rangeAll', {
       from: fmtRangeMoment(m.from, span, sameDay),
       to: fmtRangeMoment(m.to, span, sameDay)
     }));
   } else {
-    const cutoff = Date.now() / 1000 - winSec;
-    if(m.from > cutoff + Math.max(60, winSec * 0.02)){
-      const sameDayNow = new Date(m.from * 1000).toDateString() === new Date().toDateString();
-      parts.push(t('rangeDataFrom', {from: fmtRangeMoment(m.from, winSec, sameDayNow)}));
+    parts.push(windowLabel(winSec));
+    // the window ends at the newest measurement; say so when a gap follows
+    const expected = m.to - winSec;
+    if(m.from > expected + Math.max(60, winSec * 0.02)){
+      const sameDay = new Date(m.from * 1000).toDateString() === new Date(m.to * 1000).toDateString();
+      parts.push(t('rangeDataFrom', {from: fmtRangeMoment(m.from, winSec, sameDay)}));
+    }
+    if(Date.now() / 1000 - m.to > Math.max(120, winSec * 0.05)){
+      const sameDay = new Date(m.to * 1000).toDateString() === new Date().toDateString();
+      parts.push(t('rangeDataTo', {to: fmtRangeMoment(m.to, winSec, sameDay)}));
     }
   }
   if(m.step > 0) parts.push(t('rangeStep', {step: fmtStep(m.step)}));
   el.textContent = parts.join(' · ');
+  if(fresh){
+    const st = connState(cur());
+    const tol = m.zoomed ? 120 : Math.max(120, winSec * 0.05);
+    const recent = Date.now() / 1000 - m.to <= tol;
+    const live = st === 'live' && recent;
+    const archived = !live && hasData(cur()) && !isOnline(cur());
+    fresh.className = 'freshness' + (live ? ' live' : '');
+    fresh.innerHTML = `<i></i>${live ? t('freshLive')
+      : t((archived || st !== 'connecting') ? 'freshArchive' : 'freshWait')}`;
+  }
+}
+
+let updateInfo = null, updateChecking = false;
+
+function renderUpdateBanner(){
+  const el = $('updbanner'), text = $('updtext'), link = $('updlink');
+  if(!el) return;
+  const u = updateInfo;
+  if(!u || !u.ok || !u.update || !u.url){
+    el.style.display = 'none';
+    return;
+  }
+  if(localStorage.getItem('pq_update_dismissed') === String(u.latest)){
+    el.style.display = 'none';
+    return;
+  }
+  text.textContent = t('updBanner', {v: 'v' + u.latest});
+  link.href = u.url;
+  el.style.display = '';
+}
+
+function renderUpdateStatus(loading){
+  const status = $('aboutUpdateStatus'), link = $('aboutUpdateLink'), check = $('aboutCheck');
+  if(!status || !link) return;
+  if(check) check.style.display = '';
+  link.style.display = 'none';
+  if(loading){ status.textContent = t('updChecking'); return; }
+  const u = updateInfo;
+  if(!u){ status.textContent = ''; return; }
+  if(u.disabled){ status.textContent = t('updDev'); return; }
+  if(!u.ok){ status.textContent = t('updError'); return; }
+  if(u.update){
+    status.textContent = t('updAvailable', {v: 'v' + u.latest});
+    if(check) check.style.display = 'none';
+    link.href = u.url;
+    link.style.display = '';
+  } else {
+    status.textContent = t('updUpToDate');
+  }
+}
+
+async function checkUpdates(force, silent){
+  if(updateChecking) return;
+  updateChecking = true;
+  renderUpdateStatus(true);
+  try{
+    const r = await fetch('/api/update' + (force ? '?force=1' : ''), {cache:'no-store'});
+    const data = await r.json();
+    updateInfo = (silent && !data.ok) ? null : data;
+  }catch(e){
+    updateInfo = silent ? null : {ok: false, error: String(e)};
+  }
+  updateChecking = false;
+  renderUpdateStatus();
+  renderUpdateBanner();
 }
 
 function capLabel(x){
@@ -637,26 +1210,29 @@ function capLabel(x){
 }
 
 function chip(x){
-  const on = x.connected && x.data && x.data.soc !== undefined;
+  const st = connState(x);
+  const on = st === 'live';
+  const has = hasData(x);
   const name = (x.name || '').replace(/^P-/, '');
   const short = x.kind === 'group' ? name : name.replace('12100BNNA70-', '');
   const cap = capLabel(x);
-  return `<div class="chip ${x.kind==='group'?'grp':''} ${x.id===sel?'sel':''}" data-id="${x.id}">
-    <span class="dot ${on?'on':'off'}"></span>
-    <span class="nm" title="${name}">${short}${cap ? ' <span class="cap">'+cap+'</span>' : ''}</span>
-    <span class="soc">${on ? x.data.soc+'%' : '--'}</span>
+  const title = (has && !on) ? archiveTitle(x) : name;
+  return `<div class="chip ${x.kind==='group'?'grp':''} ${x.id===sel?'sel':''} ${has&&!on?'stale':''}" data-id="${x.id}" aria-busy="${st==='connecting'}" title="${esc(title)}">
+    <span class="dot ${on?'on':(st==='offline'?'off':'wait')}"></span>
+    <span class="nm" title="${esc(name)}">${short}${cap ? ' <span class="cap">'+cap+'</span>' : ''}</span>
+    <span class="soc">${has ? x.data.soc+'%' : '--'}</span>
   </div>`;
 }
 
 function fmtDuration(sec){
   if(sec === null || sec === undefined || !isFinite(sec)) return '--';
-  const totalMin = Math.max(1, Math.round(sec / 60));
+  const totalMin = Math.max(0, Math.round(sec / 60));
   const days = Math.floor(totalMin / 1440);
   const hours = Math.floor((totalMin % 1440) / 60);
   const mins = totalMin % 60;
-  if(days > 0) return `${days} ${t('dShort')} ${hours} ${t('hourShort')}`;
-  if(hours > 0) return `${hours} ${t('hourShort')} ${mins} ${t('minShort')}`;
-  return `${mins} ${t('minShort')}`;
+  const hh = String(hours).padStart(2, '0');
+  const mm = String(mins).padStart(2, '0');
+  return days > 0 ? `${days}d ${hh}:${mm}` : `${hh}:${mm}`;
 }
 
 function timeEstimate(d){
@@ -674,15 +1250,28 @@ function timeEstimate(d){
   return {sec: need / cur * 3600, mode: 'charge'};
 }
 
+function groupTimeEstimate(d){
+  if(!d) return null;
+  if(d.time_empty_sec !== null && d.time_empty_sec !== undefined){
+    return {sec: Number(d.time_empty_sec), mode: 'discharge'};
+  }
+  if(d.time_full_sec !== null && d.time_full_sec !== undefined){
+    return {sec: Number(d.time_full_sec), mode: 'charge'};
+  }
+  return null;
+}
+
 function renderChips(){
   $('chips').innerHTML = groups.map(chip).join('') + devices.map(chip).join('') +
     `<div class="chipbtns">
        <div class="chip add" id="addbat"><span>＋</span><span class="nm">${t('addBat')}</span></div>
        <div class="chip add grpbtn" id="addgrp"><span>＋</span><span class="nm">${t('addGroup')}</span></div>
+       <div class="chip add airbtn" id="airbtn"><span>📡</span><span class="nm">${t('airBtn')}</span></div>
      </div>`;
   document.querySelectorAll('.chip[data-id]').forEach(el => el.onclick = () => select(el.dataset.id));
   $('addgrp').onclick = () => openModal(null);
   $('addbat').onclick = () => openBatteryModal();
+  $('airbtn').onclick = openScan;
 }
 
 function ago(ts){
@@ -700,13 +1289,6 @@ function renderScan(){
   const chk = $('chkOnlyBat');
   if(chk) chk.checked = onlyBat;
   const air = onlyBat ? items.filter(i => isBatName(i.name || i.label || '')) : items;
-  const bms = air.filter(i => i.ffe0).length;
-  const online = devices.filter(d => d.connected).length;
-  $('scaninfo').textContent = scan.ts
-    ? t('scanLine', {n:items.length, b:bms, c:online,
-                     time:new Date(scan.ts*1000).toLocaleTimeString()})
-      + (onlyBat ? ' · ' + t('onlyBatShort') : '')
-    : t('scanning');
   const tabAir = document.querySelector('#scantabs [data-t="air"]');
   const tabHist = document.querySelector('#scantabs [data-t="hist"]');
   if(tabAir) tabAir.textContent = t('tabAir', {n: air.length});
@@ -728,15 +1310,15 @@ function renderScan(){
           r.ignored ? `<span class="badge">${t('stRemoved')}</span>` : '',
           r.ffe0 ? '<span class="badge grp">BMS</span>' : ''
         ].filter(Boolean).join(' ');
+        const addBtn = (r.ffe0 && isBatName(r.name) && (!r.known || r.ignored))
+          ? ` <button class="iconbtn mini" data-add="${r.address}">${t('addDo')}</button>` : '';
         return `<div class="row seen ${r.known?'lnk':''}" data-id="${r.address}" data-known="${r.known?1:0}">
-          <div>${nm} ${badges}</div>
+          <div>${nm} ${badges}${addBtn}</div>
           <div class="mut">${r.address}</div>
           <div class="num">${when}</div>
           <div class="num">${r.count}</div>
           <div class="num">${r.last_rssi} dBm</div></div>`;
       }).join('') : `<div class="row seen"><div class="mut">${t('emptyHistory')}</div></div>`);
-    document.querySelectorAll('.row.seen[data-known="1"]').forEach(el =>
-      el.onclick = () => { select(el.dataset.id); $('smodal').classList.remove('show'); });
     return;
   }
 
@@ -748,8 +1330,7 @@ function renderScan(){
         : i.known ? `<span class="badge bad">${t('stOffline')}</span>`
         : i.ignored ? `<span class="badge">${t('stRemoved')}</span>`
         : (i.ffe0 ? `<span class="badge warn">${t('stNew')}</span>` : '<span class="badge">—</span>');
-      const isBatName = /^[A-Z]-\d{5}/i.test(i.name || '');
-      const action = (i.ffe0 && isBatName && (!i.known || i.ignored))
+      const action = (i.ffe0 && isBatName(i.name) && (!i.known || i.ignored))
         ? `<button class="iconbtn mini" data-add="${i.address}">${t('connect')}</button>`
         : status;
       const nm = i.name ? i.name.replace(/^P-/,'') : (i.label || t('unnamed'));
@@ -759,14 +1340,16 @@ function renderScan(){
         <div class="num">${i.rssi} dBm</div>
         <div class="num">${action}</div></div>`;
     }).join('') : `<div class="row scan"><div class="mut">${t('nothingFound')}</div></div>`);
-  document.querySelectorAll('.row.scan[data-known="1"]').forEach(el =>
-    el.onclick = () => { select(el.dataset.id); $('smodal').classList.remove('show'); });
 }
 
 function select(id){
-  sel = id; hover = null;
+  clearZoom();
+  sel = id; hover = null; hoverY = null; viewSelected = id; histError = false;
   const x = cur();
+  // groups have no per-cell series; switching back restores the battery tab
   if(isGroup(x) && metric === 'cells') setMetric('pack');
+  else if(!isGroup(x) && lastDeviceMetric && metric !== lastDeviceMetric) setMetric(lastDeviceMetric);
+  scheduleViewSave();
   render();
   loadHistory(sel);
 }
@@ -787,13 +1370,16 @@ function cellRow(i, mv, min, max, balancing){
 
 function memberRow(m){
   const on = m.connected && m.pack_v !== undefined;
-  return `<div class="row mem" data-dev="${m.id||''}">
-    <div><span class="dot ${on?'on':'off'}"></span> ${m.name.replace('12100BNNA70-','')}</div>
-    <div class="num">${on ? fmt(m.pack_v,3)+' V' : '--'}</div>
-    <div class="num">${on ? (m.current_a>0?'+':'')+fmt(m.current_a,2)+' A' : '--'}</div>
-    <div class="num">${on ? m.soc+' %' : '--'}</div>
-    <div class="num">${on ? t('deltaVal',{v:m.delta_mv}) : '--'}</div>
-    <div class="num mut">${on ? m.cell_temp_c+'°C' : '--'}</div>
+  const has = m.pack_v !== undefined;
+  const temp = m.cell_temp_c === null || m.cell_temp_c === undefined ? '--' : m.cell_temp_c+'°C';
+  return `<div class="row mem ${has && !on ? 'stale' : ''}" data-dev="${m.id||''}"
+       title="${has && !on ? esc(archiveTitle(m)) : ''}">
+    <div><span class="dot ${on?'on':(has?'off':'off')}"></span> ${m.name.replace('12100BNNA70-','')}</div>
+    <div class="num">${has ? fmt(m.pack_v,3)+' V' : '--'}</div>
+    <div class="num">${has ? (m.current_a>0?'+':'')+fmt(m.current_a,2)+' A' : '--'}</div>
+    <div class="num">${has ? m.soc+' %' : '--'}</div>
+    <div class="num">${has ? t('deltaVal',{v:m.delta_mv}) : '--'}</div>
+    <div class="num mut">${has ? temp : '--'}</div>
   </div>`;
 }
 
@@ -814,6 +1400,7 @@ async function openAbout(){
     list.innerHTML = '';
     box.style.display = 'none';
   }
+  renderUpdateStatus();
   $('amodal').classList.add('show');
 }
 
@@ -834,50 +1421,67 @@ function render(){
   renderBt();
   renderRange();
   const x = cur();
-  const on = x && x.connected && x.data && (x.data.pack_mv !== undefined || x.data.soc !== undefined);
+  const st = connState(x);
+  const on = st === 'live';
+  const avail = hasData(x);
   const g = isGroup(x);
-  $('dot').className = 'dot ' + (on ? 'on' : 'off');
+  $('dot').className = 'dot ' + ((serverDown || st === 'offline') ? 'off' : (on ? 'on' : 'wait'));
   $('name').textContent = x ? (isGroup(x) && capLabel(x) ? `${x.name} · ${capLabel(x)}` : x.name.replace(/^P-/, '')) : 'Power Peasant';
   $('edit').style.display = g ? '' : 'none';
   $('remove').style.display = (x && !g) ? '' : 'none';
-  $('status').textContent = on
-    ? (g ? t('grpStatus', {on:x.data.online, tot:x.data.members_total,
-                           part:(x.data.partial ? t('partial') : ''),
-                           mode:t(x.data.mode === 'parallel' ? 'parallel' : 'series')})
-         : t('liveStatus', {time:new Date(x.updated*1000).toLocaleTimeString(), n:x.polls}))
-    : (x ? (x.error || t('connecting')) : t('searching'));
+  let statusText;
+  if(serverDown) statusText = t('monitorOffline');
+  else if(!x) statusText = t('searching');
+  else if(on) statusText = g
+    ? t('grpStatus', {on:x.data.online, tot:x.data.members_total,
+                      part:(x.data.partial ? t('partial') : ''),
+                      mode:t(x.data.mode === 'parallel' ? 'parallel' : 'series')})
+    : t('liveStatus', {time:new Date(x.updated*1000).toLocaleTimeString(), n:x.polls});
+  else if(avail){
+    const err = x.error && !/^(starting|scanning|connecting)/.test(String(x.error)) ? x.error : '';
+    statusText = archiveText(x, err || t('noLink'));
+  } else statusText = x.error || t(st === 'offline' ? 'noLink' : 'connecting');
+  $('status').textContent = statusText;
+  $('status').title = (avail && !on) ? archiveTitle(x) : deviceMeta(x);
 
-  const d = on ? x.data : {};
-  $('pack').textContent = on ? fmt((d.pack_mv||0)/1000,3) : '--';
-  $('cur').textContent = on ? (d.current_a>0?'+':'')+fmt(d.current_a,2) : '--';
-  $('pow').textContent = on ? fmt(d.power_w,1) : '--';
-  $('soc').textContent = on ? d.soc : '--';
-  const te = on ? timeEstimate(d) : null;
+  const d = avail ? x.data : {};
+  $('pack').textContent = avail ? fmt((d.pack_mv||0)/1000,3) : '--';
+  $('cur').textContent = avail ? (d.current_a>0?'+':'')+fmt(d.current_a,2) : '--';
+  $('pow').textContent = avail ? fmt(d.power_w,1) : '--';
+  $('soc').textContent = avail ? d.soc : '--';
+  const te = on ? (g ? (groupTimeEstimate(d) || timeEstimate(d)) : timeEstimate(d)) : null;
   $('time').textContent = on ? fmtDuration(te ? te.sec : null) : '--';
-  $('time').title = te ? t(te.mode === 'charge' ? 'timeToFull' : 'timeToEmpty') : '';
-  $('rem').textContent = on ? fmt(d.remaining_ah,2) : '--';
-  $('fcc').textContent = on ? ((g && d.partial && d.cap_total_ah)
+  $('time').title = te
+    ? t(te.mode === 'charge' ? 'timeToFull' : 'timeToEmpty')
+      + (g ? ` · ${t(d.mode === 'series' ? 'series' : 'parallel')}` : '')
+    : '';
+  $('rem').textContent = avail ? fmt(d.remaining_ah,2) : '--';
+  $('fcc').textContent = avail ? ((g && d.partial && d.cap_total_ah)
     ? `${fmt(d.fcc_ah,2)} / ${fmt(d.cap_total_ah,2)}` : fmt(d.fcc_ah,2)) : '--';
-  $('ct').textContent = on ? d.cell_temp_c : '--';
-  $('mt').textContent = on ? d.mos_temp_c : '--';
-  $('soh').textContent = on ? d.soh : '--';
-  $('cyc').textContent = on ? d.cycles : '--';
-  $('dah').textContent = on ? d.discharged_ah : '--';
-  $('flags').innerHTML = !on ? '--' : ((d.protect==='00000000' && d.failure==='000000')
-    ? `<span class="badge ok">${t('none')}</span>`
-    : `<span class="badge bad">P:${d.protect} F:${d.failure}</span>`);
+  $('ct').textContent = avail && d.cell_temp_c !== null && d.cell_temp_c !== undefined ? d.cell_temp_c : '--';
+  $('mt').textContent = avail && d.mos_temp_c !== null && d.mos_temp_c !== undefined ? d.mos_temp_c : '--';
+  $('soh').textContent = avail && d.soh !== null && d.soh !== undefined ? d.soh : '--';
+  $('cyc').textContent = avail ? d.cycles : '--';
+  $('dah').textContent = avail ? d.discharged_ah : '--';
+  $('flags').innerHTML = !avail ? '--' : ((d.protect===undefined || d.failure===undefined)
+    ? '<span class="mut">--</span>'
+    : ((d.protect==='00000000' && d.failure==='000000')
+      ? `<span class="badge ok">${t('none')}</span>`
+      : `<span class="badge bad">P:${d.protect} F:${d.failure}</span>`));
+  document.querySelectorAll('.grid').forEach(el => el.classList.toggle('stale', avail && !on));
 
+  $('cells').classList.toggle('stale', avail && !on);
   if(g){
     $('sectitle').textContent = t('members');
-    $('delta').textContent = on ? t('deltaMax', {v:d.delta_mv}) : '--';
-    $('delta').className = 'badge ' + (!on?'':(d.delta_mv<=T.dOk?'ok':(d.delta_mv<=T.dWarn?'warn':'bad')));
+    $('delta').textContent = avail ? t('deltaMax', {v:d.delta_mv}) : '--';
+    $('delta').className = 'badge ' + (!avail?'':(d.delta_mv<=T.dOk?'ok':(d.delta_mv<=T.dWarn?'warn':'bad')));
     $('bal').textContent = t(x.data.mode === 'parallel' ? 'parallel' : 'series');
     $('bal').className = 'badge grp';
     $('celllegend').style.display = 'none';
     const packs = (x.data.members || [])
-      .filter(m => m.connected && m.pack_v !== undefined && m.pack_v !== null)
+      .filter(m => m.pack_v !== undefined && m.pack_v !== null)
       .map(m => m.pack_v * 1000);
-    if(on && packs.length > 1){
+    if(avail && packs.length > 1){
       const spread = Math.round(Math.max(...packs) - Math.min(...packs));
       $('vspread').textContent = t('vSpread', {v:spread});
       $('vspread').className = 'badge ' + (spread<=T.pOk?'ok':(spread<=T.pBad?'warn':'bad'));
@@ -886,7 +1490,7 @@ function render(){
     } else {
       $('vspread').style.display = 'none';
     }
-    $('cells').innerHTML = on
+    $('cells').innerHTML = avail
       ? `<div class="row mem head"><div>${t('battery')}</div><div class="num">${t('voltage')}</div>
          <div class="num">${t('currentS')}</div><div class="num">SOC</div>
          <div class="num">${t('deltaCell')}</div><div class="num">${t('temp')}</div></div>`
@@ -898,12 +1502,13 @@ function render(){
   } else {
     $('sectitle').textContent = t('cells');
     $('vspread').style.display = 'none';
-    $('celllegend').style.display = on ? '' : 'none';
-    if(!on){
+    $('celllegend').style.display = avail ? '' : 'none';
+    const cells = d.cells_mv || [];
+    if(!avail || !cells.length){
       $('cells').innerHTML=''; $('delta').textContent='--'; $('bal').textContent='--';
       $('delta').className='badge'; $('bal').className='badge';
     } else {
-      const cells = d.cells_mv || [], max = Math.max(...cells), min = Math.min(...cells);
+      const max = Math.max(...cells), min = Math.min(...cells);
       $('cells').innerHTML = `<div class="row head"><div>#</div><div>${t('level')}</div>
         <div class="num">${t('voltage')}</div><div class="num"><span class="unit">mV</span></div></div>` +
         cells.map((mv,i)=>cellRow(i,mv,min,max,(d.balance_mask>>i)&1)).join('');
@@ -915,29 +1520,38 @@ function render(){
       $('bal').className = 'badge ' + (bal.length?'warn':'');
     }
   }
-  $('metrics').querySelector('[data-m="cells"]').disabled = g;
+  const cellsBtn = $('metrics').querySelector('[data-m="cells"]');
+  cellsBtn.disabled = g;
+  cellsBtn.title = g ? t('cellsGroupHint') : '';
   if(g && metric === 'cells') metric = 'pack';
-  document.querySelectorAll('#metrics button').forEach(b => b.classList.toggle('on', b.dataset.m === metric));
+  syncMetricButtons();
   drawChart();
+  updateBusy();
 }
 
 function seriesFor(points, m){
-  if(m === 'cells' && points[0].length > 4){
-    const n = points[0].length - 4, arr = [];
-    for(let i=0;i<n;i++) arr.push({name:t('cellN',{n:i+1}), color:PALETTE[i%PALETTE.length],
-      vals: points.map(p => p[4+i]*1000), unit:'mV', dec:0});
+  if(m === 'cells'){
+    const nCells = points.reduce((n, p) => Math.max(n, p.length - 4), 0);
+    if(!nCells) return [];
+    const arr = [];
+    for(let i=0;i<nCells;i++) arr.push({name:t('cellN',{n:i+1}), color:PALETTE[i%PALETTE.length],
+      // a missing cell value stays null: it is a gap, not a made-up number
+      vals: points.map(p => (p.length > 4+i && p[4+i] != null) ? p[4+i]*1000 : null),
+      unit:'mV', dec:0});
     return arr;
   }
-  if(m === 'cells' || m === 'pack') return [{name:t('pack'), color:'#58a6ff', vals:points.map(p=>p[1]), unit:'V', dec:3}];
+  if(m === 'pack') return [{name:t('pack'), color:'#58a6ff', vals:points.map(p=>p[1]), unit:'V', dec:3}];
   if(m === 'current') return [{name:t('currentS'), color:'#f2a33c', vals:points.map(p=>p[2]), unit:'A', dec:2}];
   return [{name:'SOC', color:'#35d07f', vals:points.map(p=>p[3]), unit:'%', dec:0}];
 }
 
 function drawChart(){
   const cv = $('chart'), tip = $('tip'), empty = $('empty');
-  const nowSec = Date.now() / 1000;
-  const pts = (hist[sel] || []).filter(p => !winSec || p[0] >= nowSec - winSec);
+  // the server already returns exactly the requested window (anchored to the
+  // newest measurement), so never trim or extend it on the client
+  const pts = hist[sel] || [];
   if(pts.length < 2){
+    geom = null;
     empty.style.display='flex';
     empty.textContent = pts.length ? t('collecting') : t('noData');
     $('legend').innerHTML='';
@@ -957,38 +1571,109 @@ function drawChart(){
 
   const P = {l:52, r:14, t:14, b:26};
   const series = seriesFor(pts, metric);
+  if(!series.length){
+    geom = null;
+    empty.style.display='flex';
+    empty.textContent = t('noCellData');
+    $('legend').innerHTML='';
+    const c0 = cv.getContext('2d'); c0.clearRect(0,0,cv.width,cv.height);
+    return;
+  }
   let lo = Infinity, hi = -Infinity;
-  series.forEach(s => s.vals.forEach(v => { if(v<lo) lo=v; if(v>hi) hi=v; }));
+  series.forEach(s => s.vals.forEach(v => {
+    if(v != null && isFinite(v)){ if(v<lo) lo=v; if(v>hi) hi=v; }
+  }));
+  if(!isFinite(lo) || !isFinite(hi)){ lo = 0; hi = 1; }
   if(metric === 'current'){ lo = Math.min(lo, 0); hi = Math.max(hi, 0); }
   if(lo === hi){ lo -= 1; hi += 1; }
   const pad = (hi-lo)*0.12 || 1;
   lo -= pad; hi += pad;
+  if(metric === 'soc'){ lo = Math.max(0, lo); hi = Math.min(100, hi); }
 
-  const t0 = winSec ? nowSec - winSec : pts[0][0];
-  const t1 = winSec ? nowSec : pts[pts.length-1][0];
+  // x axis covers the real measurements only
+  const t0 = pts[0][0];
+  const t1 = pts[pts.length-1][0];
   const span = Math.max(1, t1 - t0);
   const X = t => P.l + (t - t0)/span * (W - P.l - P.r);
   const Y = v => H - P.b - (v - lo)/(hi - lo) * (H - P.t - P.b);
 
+  // a real pause in logging is a gap, never a straight line across it
+  const meta = histMeta[sel] || {};
+  const stepSec = Number(meta.step) || 0;
+  const deltas = [];
+  for(let i=1;i<pts.length;i++){
+    const dt = pts[i][0] - pts[i-1][0];
+    if(dt > 0) deltas.push(dt);
+  }
+  deltas.sort((a,b) => a-b);
+  const typical = deltas.length ? deltas[Math.floor(deltas.length/2)] : 0;
+  const gapLimit = Math.max(5, stepSec * 2.5, typical * 3);
+  const gapAt = i => i > 0 && (pts[i][0] - pts[i-1][0]) > gapLimit;
+  const segmentsFor = vals => {
+    const segs = []; let cur = [];
+    vals.forEach((v,i) => {
+      const ok = v != null && isFinite(v);
+      if(!ok || gapAt(i)){ if(cur.length){ segs.push(cur); cur = []; } }
+      if(ok) cur.push(i);
+    });
+    if(cur.length) segs.push(cur);
+    return segs;
+  };
+  // bars need a few pixels per group; average real samples instead of
+  // painting sub-pixel bars on top of each other (gaps start a new group)
+  const binBars = () => {
+    const per = pts.length / Math.max(1, Math.floor((W - P.l - P.r) / (series.length * 3 + 2)));
+    const groups = []; let cur = null, next = per;
+    for(let i=0;i<pts.length;i++){
+      if(cur && (i >= next || gapAt(i))){ groups.push(cur); cur = null; }
+      if(!cur){
+        cur = {tSum:0, n:0, sums:new Array(series.length).fill(0), counts:new Array(series.length).fill(0)};
+        next = i + per;
+      }
+      cur.tSum += pts[i][0]; cur.n++;
+      series.forEach((s,si) => {
+        const v = s.vals[i];
+        if(v != null && isFinite(v)){ cur.sums[si] += v; cur.counts[si]++; }
+      });
+    }
+    if(cur) groups.push(cur);
+    return groups.map(g => ({
+      t: g.tSum / g.n,
+      vals: g.sums.map((sum,si) => g.counts[si] ? sum / g.counts[si] : null)
+    }));
+  };
+
   const themeCss = getComputedStyle(document.documentElement);
   const cssVar = (name, fallback) => (themeCss.getPropertyValue(name) || '').trim() || fallback;
+  const negColor = cssVar('--neg', '#4dd0e1');
+  const colorFor = (color, v) => (v < 0 ? negColor : color);
+  const hasNegative = vals => vals.some(v => v != null && isFinite(v) && v < 0);
+  // bars, area fills and color splits grow from zero, not from the plot bottom
+  // (clamped so metrics without negatives keep the full-height baseline)
+  const y0 = Math.max(P.t, Math.min(H - P.b, Y(0)));
 
   ctx.strokeStyle = cssVar('--grid', '#222834'); ctx.fillStyle = cssVar('--mut', '#8b94a7');
   ctx.lineWidth = 1; ctx.font = '11px system-ui,Segoe UI,sans-serif';
   ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  // decimals follow the grid step, so narrow spans never repeat the same label
+  const tickStep = (hi - lo) / 4;
+  const dec = Math.max(0, Math.min(5, Math.ceil(-Math.log10(tickStep))));
   for(let i=0;i<=4;i++){
     const v = lo + (hi-lo)*i/4, y = Y(v);
     ctx.beginPath(); ctx.moveTo(P.l, y); ctx.lineTo(W-P.r, y); ctx.stroke();
-    const spanY = hi - lo;
-    const dec = metric==='cells' ? 0 : metric==='pack' ? (spanY < 0.06 ? 3 : 2)
-              : metric==='current' ? 1 : 0;
     ctx.fillText(v.toFixed(dec), P.l-8, y);
   }
   ctx.textBaseline = 'top';
   const ticks = 4;
+  const axisLabel = ts => {
+    if(span > 2*86400) return fmtDate(ts, span > 365*86400);
+    if(span > 8*3600) return `${fmtDate(ts)} ${fmtClock(ts)}`;
+    if(span > 3600) return fmtClock(ts);
+    return fmtClock(ts, true);
+  };
   for(let i=0;i<=ticks;i++){
     const tt = t0 + span*i/ticks;
-    const lbl = new Date(tt*1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    const lbl = axisLabel(tt);
     ctx.textAlign = i===0 ? 'left' : (i===ticks ? 'right' : 'center');
     ctx.fillText(lbl, X(tt), H - P.b + 7);
   }
@@ -999,84 +1684,153 @@ function drawChart(){
     ctx.setLineDash([]);
   }
 
+  const barGroups = chartStyle === 'bars' ? binBars() : null;
+
   series.forEach((s, si) => {
-    const last = s.vals[s.vals.length-1];
-    const buildPath = () => {
+    const segs = segmentsFor(s.vals);
+    const buildPath = seg => {
       ctx.beginPath();
-      if(chartStyle === 'step'){
-        pts.forEach((p,i) => {
-          const x = X(p[0]), y = Y(s.vals[i]);
-          if(i === 0) ctx.moveTo(x, y);
-          else { ctx.lineTo(x, Y(s.vals[i-1])); ctx.lineTo(x, y); }
-        });
-      } else {
-        pts.forEach((p,i) => {
-          const x = X(p[0]), y = Y(s.vals[i]);
-          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-        });
-      }
+      seg.forEach((pi, k) => {
+        const x = X(pts[pi][0]), y = Y(s.vals[pi]);
+        if(k === 0){ ctx.moveTo(x, y); return; }
+        if(chartStyle === 'step'){
+          ctx.lineTo(x, Y(s.vals[seg[k-1]])); ctx.lineTo(x, y);
+        } else ctx.lineTo(x, y);
+      });
     };
 
     if(chartStyle === 'bars'){
-      const slot = (W - P.l - P.r) / Math.max(1, pts.length - 1);
+      const slot = (W - P.l - P.r) / Math.max(1, barGroups.length - 1);
       const groupW = Math.max(1, slot * 0.78);
       const bw = Math.max(1, groupW / series.length);
-      ctx.fillStyle = s.color; ctx.globalAlpha = 0.85;
-      pts.forEach((p,i) => {
-        const y = Y(s.vals[i]);
-        const x = X(p[0]) - groupW/2 + si*bw;
-        ctx.fillRect(x, y, Math.max(1, bw - 1), H - P.b - y);
+      const barW = Math.max(1, bw - 1);
+      ctx.globalAlpha = 0.85;
+      barGroups.forEach(g => {
+        const v = g.vals[si];
+        if(v == null || !isFinite(v)) return;
+        const y = Y(v);
+        const x = X(g.t) - groupW/2 + si*bw;
+        ctx.fillStyle = colorFor(s.color, v);
+        // positives grow up from zero, negatives hang down from it
+        ctx.fillRect(x, Math.min(y, y0), barW, Math.max(1, Math.abs(y0 - y)));
       });
       ctx.globalAlpha = 1;
       return;
     }
 
     if(chartStyle === 'dots'){
-      ctx.fillStyle = s.color;
       pts.forEach((p,i) => {
-        ctx.beginPath(); ctx.arc(X(p[0]), Y(s.vals[i]), 1.8, 0, Math.PI*2); ctx.fill();
+        const v = s.vals[i];
+        if(v == null || !isFinite(v)) return;
+        ctx.fillStyle = colorFor(s.color, v);
+        ctx.beginPath(); ctx.arc(X(p[0]), Y(v), 1.8, 0, Math.PI*2); ctx.fill();
       });
       return;
     }
 
     if(chartStyle === 'area'){
-      buildPath();
-      ctx.save();
-      ctx.lineTo(X(t1), H - P.b);
-      ctx.lineTo(X(t0), H - P.b);
-      ctx.closePath();
-      ctx.fillStyle = s.color; ctx.globalAlpha = 0.14; ctx.fill();
-      ctx.restore();
+      // fill from zero in both directions, each side in its own color
+      const fillSide = (color, top, bottom) => {
+        ctx.save();
+        ctx.beginPath(); ctx.rect(P.l, top, W - P.l - P.r, Math.max(0, bottom - top)); ctx.clip();
+        ctx.fillStyle = color; ctx.globalAlpha = 0.14;
+        segs.forEach(seg => {
+          if(seg.length < 2) return;
+          buildPath(seg);
+          ctx.lineTo(X(pts[seg[seg.length-1]][0]), y0);
+          ctx.lineTo(X(pts[seg[0]][0]), y0);
+          ctx.closePath(); ctx.fill();
+        });
+        ctx.restore();
+      };
+      fillSide(s.color, P.t, y0);
+      if(hasNegative(s.vals)) fillSide(negColor, y0, H - P.b);
     }
 
-    buildPath();
-    ctx.strokeStyle = s.color; ctx.lineWidth = 1.8; ctx.lineJoin = 'round';
-    ctx.stroke();
-    ctx.fillStyle = s.color;
-    ctx.beginPath(); ctx.arc(X(t1), Y(last), 2.6, 0, Math.PI*2); ctx.fill();
+    const strokeSegs = color => {
+      ctx.strokeStyle = color; ctx.lineWidth = 1.8; ctx.lineJoin = 'round';
+      segs.forEach(seg => {
+        if(seg.length > 1){ buildPath(seg); ctx.stroke(); return; }
+        // a lone real measurement must stay visible, not vanish between gaps
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(X(pts[seg[0]][0]), Y(s.vals[seg[0]]), 1.8, 0, Math.PI*2); ctx.fill();
+      });
+    };
+    if(hasNegative(s.vals)){
+      // paint the same path twice, clipped above and below the zero line
+      const strokeSide = (color, top, bottom) => {
+        ctx.save();
+        ctx.beginPath(); ctx.rect(P.l, top, W - P.l - P.r, Math.max(0, bottom - top)); ctx.clip();
+        strokeSegs(color); ctx.restore();
+      };
+      strokeSide(s.color, P.t, y0);
+      strokeSide(negColor, y0, H - P.b);
+    } else strokeSegs(s.color);
+
+    // marker on the last real measurement only
+    let li = s.vals.length - 1;
+    while(li >= 0 && (s.vals[li] == null || !isFinite(s.vals[li]))) li--;
+    if(li >= 0){
+      ctx.fillStyle = colorFor(s.color, s.vals[li]);
+      ctx.beginPath(); ctx.arc(X(pts[li][0]), Y(s.vals[li]), 2.6, 0, Math.PI*2); ctx.fill();
+    }
   });
 
   geom = {P, W, H, t0, t1, pts, series};
+
+  if(dragSel){
+    // selection rectangle for drag-to-zoom, clamped to the plot area
+    const a = Math.max(P.l, Math.min(dragSel.x0, dragSel.x1));
+    const b = Math.min(W - P.r, Math.max(dragSel.x0, dragSel.x1));
+    ctx.save();
+    ctx.fillStyle = cssVar('--blu', '#58a6ff'); ctx.globalAlpha = 0.14;
+    ctx.fillRect(a, P.t, Math.max(0, b - a), H - P.t - P.b);
+    ctx.globalAlpha = 0.8; ctx.lineWidth = 1;
+    ctx.strokeStyle = cssVar('--blu', '#58a6ff');
+    ctx.strokeRect(a + 0.5, P.t + 0.5, Math.max(0, b - a - 1), H - P.t - P.b - 1);
+    ctx.restore();
+  }
 
   if(hover !== null && hover >= 0 && hover < pts.length){
     const hx = X(pts[hover][0]);
     ctx.strokeStyle = cssVar('--hoverline', '#5a6678'); ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(hx, P.t); ctx.lineTo(hx, H-P.b); ctx.stroke();
     series.forEach(s => {
-      ctx.fillStyle = s.color;
-      ctx.beginPath(); ctx.arc(hx, Y(s.vals[hover]), 3, 0, Math.PI*2); ctx.fill();
+      const v = s.vals[hover];
+      if(v == null || !isFinite(v)) return;
+      ctx.fillStyle = colorFor(s.color, v);
+      ctx.beginPath(); ctx.arc(hx, Y(v), 3, 0, Math.PI*2); ctx.fill();
     });
-    const dt = new Date(pts[hover][0]*1000).toLocaleTimeString();
-    tip.innerHTML = `<b>${dt}</b>` + series.map(s =>
-      `<div><span style="color:${s.color}">●</span> ${s.name}: <b>${s.vals[hover].toFixed(s.dec)} ${s.unit}</b></div>`).join('');
-    tip.style.left = (cv.offsetLeft + Math.min(W - 150, Math.max(8, hx + 12))) + 'px';
-    tip.style.top = (cv.offsetTop + 10) + 'px';
+    const dt = (span > 3600 ? fmtDate(pts[hover][0], span > 365*86400) + ' ' : '')
+             + fmtClock(pts[hover][0], true);
+    tip.innerHTML = `<b>${dt}</b>` + series.map(s => {
+      const v = s.vals[hover];
+      const txt = (v == null || !isFinite(v)) ? '--' : `${v.toFixed(s.dec)} ${s.unit}`;
+      return `<div><span style="color:${colorFor(s.color, v)}">●</span> ${s.name}: <b>${txt}</b></div>`;
+    }).join('');
+    // keep the tip next to the cursor but flip it at the edges so it never
+    // covers the hovered point or the plot edge
     tip.style.display = 'block';
+    const tw = tip.offsetWidth, th = tip.offsetHeight, gap = 12;
+    const hy = (hoverY == null) ? H / 2 : Math.max(0, Math.min(H, hoverY));
+    let tx = hx + gap;
+    if(tx + tw > W - 2) tx = hx - tw - gap;
+    tx = Math.max(2, Math.min(tx, Math.max(2, W - tw - 2)));
+    let ty = hy - th - gap;
+    if(ty < 2) ty = hy + gap;
+    ty = Math.max(2, Math.min(ty, Math.max(2, H - th - 2)));
+    tip.style.left = (cv.offsetLeft + tx) + 'px';
+    tip.style.top = (cv.offsetTop + ty) + 'px';
   } else tip.style.display = 'none';
 
-  $('legend').innerHTML = series.map(s =>
-    `<span><span style="color:${s.color}">■</span> ${s.name} ${s.vals[s.vals.length-1].toFixed(s.dec)} ${s.unit}</span>`
-  ).join('');
+  $('legend').innerHTML = series.map(s => {
+    let li = s.vals.length - 1;
+    while(li >= 0 && (s.vals[li] == null || !isFinite(s.vals[li]))) li--;
+    const txt = li >= 0 ? `${s.vals[li].toFixed(s.dec)} ${s.unit}` : '--';
+    const col = colorFor(s.color, li >= 0 ? s.vals[li] : 0);
+    return `<span><span style="color:${col}">■</span> ${s.name} ${txt}</span>`;
+  }).join('');
 }
 
 // ---- add battery modal ----
@@ -1118,16 +1872,24 @@ function renderBatteryList(){
   document.querySelectorAll('[data-badd]').forEach(b => b.onclick = () => addBattery(b));
 }
 
-async function addBattery(btn){
-  const addr = btn.dataset.badd;
-  btn.disabled = true; btn.textContent = '…';
-  try{
-    await fetch('/api/devices', {method:'POST', headers:{'Content-Type':'application/json'},
-                                body: JSON.stringify({address: addr})});
-  }catch(e){}
+// single add path for every "＋ Add" button (battery dialog and scan history)
+async function addDeviceByAddr(addr, btn){
+  const label = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = '…'; }
+  const res = await postJson('/api/devices', {address: addr});
+  if(res.ok && res.data && res.data.ok){
+    const dup = res.data.added === false;
+    showToast(t(dup ? 'alreadyAdded' : 'added', {name: res.data.name || addr}));
+  } else {
+    showToast(t('addFailed', {err: apiError(res)}), true);
+  }
   await poll();
-  renderBatteryList();
+  battTs = -1; scanRenderedTs = -1;
+  renderBatteryList(); renderScan();
+  if(btn && btn.isConnected){ btn.disabled = false; btn.textContent = label; }
 }
+
+function addBattery(btn){ return addDeviceByAddr(btn.dataset.badd, btn); }
 
 function openBatteryModal(){
   $('bfilter').value = '';
@@ -1259,6 +2021,7 @@ function openSettings(){
   $('cfgMinColor').value = c.cellMin || '#f2a33c';
   $('cfgNormColor').value = c.cellNormal || '#58a6ff';
   $('cfgCritColor').value = c.cellCritical || '#ef5b5b';
+  $('cfgNegColor').value = c.chartNegative || '#4dd0e1';
   paletteDraft = (c.chartPalette && c.chartPalette.length) ? c.chartPalette.slice() : PALETTE_DEF.slice();
   renderPaletteEditor();
   $('cfgScaleMin').value = cells.scaleMinV ?? 3.00;
@@ -1282,6 +2045,7 @@ function numv(id, fallback){
 
 async function saveSettings(){
   const aboutCfg = (cfg && cfg.ui && cfg.ui.about) || {};
+  const oldDefault = cfgGet('ui.chart.defaultWindowSec', 600);
   const body = {
     ui: {
       language: (cfg && cfg.ui && cfg.ui.language) || 'en',
@@ -1290,6 +2054,7 @@ async function saveSettings(){
         cellMin: $('cfgMinColor').value,
         cellNormal: $('cfgNormColor').value,
         cellCritical: $('cfgCritColor').value,
+        chartNegative: $('cfgNegColor').value,
         chartPalette: paletteDraft.slice()
       },
       cells: { scaleMinV: numv('cfgScaleMin', 3.00),
@@ -1307,33 +2072,124 @@ async function saveSettings(){
               logIntervalSec: numv('cfgLog', 10),
               historyHours: numv('cfgHist', 2) }
   };
+  let ok = false;
   try{
     const r = await fetch('/api/config', {method:'POST', headers:{'Content-Type':'application/json'},
                                          body: JSON.stringify(body)});
-    if(r.ok){
-      cfg = await r.json();
+    const data = await r.json().catch(() => null);
+    const saved = data && data.config;
+    if(r.ok && data && data.ok && data.verified && saved && saved.ui && saved.ui.view){
+      cfg = saved;
       applyConfig();
+      const newDefault = cfgGet('ui.chart.defaultWindowSec', 600);
+      if(Number(newDefault) !== Number(oldDefault)){
+        // apply a changed default right away instead of waiting for a reset
+        winSec = Number(newDefault);
+        syncWindowControls();
+        scheduleViewSave();
+      }
       render();
       if(sel) loadHistory(sel);
       drawChart();
+      ok = true;
     }
-  }catch(e){}
-  $('cfgmodal').classList.remove('show');
+  }catch(e){ ok = false; }
+  if(ok){
+    $('cfgmodal').classList.remove('show');
+    showToast(t('viewSaved'));
+  } else {
+    showToast(t('viewSaveFailed'), true);
+  }
+}
+
+// ---- chart / filter state ----
+function currentView(){
+  // never persist the auto-switched group tab; keep what the batteries use
+  return {metric: isGroup(cur()) ? (lastDeviceMetric || metric) : metric,
+          chartStyle, windowSec: winSec, selected: sel || ''};
+}
+
+function sameView(a, b){
+  return !!a && a.metric === b.metric && a.chartStyle === b.chartStyle
+    && Number(a.windowSec) === Number(b.windowSec)
+    && String(a.selected || '') === String(b.selected || '');
+}
+
+let toastTimer = null;
+function showToast(msg, bad){
+  const el = $('toast');
+  if(!el) return;
+  el.textContent = msg;
+  el.className = 'toast show ' + (bad ? 'bad' : 'ok');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = 'toast'; }, bad ? 3200 : 1500);
+}
+
+// POST JSON, never throws: {ok, status, data}
+async function postJson(url, payload){
+  try{
+    const init = {method:'POST', headers:{'Content-Type':'application/json'}};
+    if(payload !== undefined) init.body = JSON.stringify(payload);
+    const r = await fetch(url, init);
+    return {ok: r.ok, status: r.status, data: await r.json().catch(() => null)};
+  }catch(e){ return {ok: false, status: 0, data: null}; }
+}
+
+function apiError(res){
+  return (res.data && res.data.error) || (res.status ? 'HTTP ' + res.status : t('noLink'));
+}
+
+function scheduleViewSave(){
+  if(!cfg) return;
+  viewDirty = true;
+  clearTimeout(viewTimer);
+  viewTimer = setTimeout(saveView, 600);
+}
+
+async function saveView(){
+  if(!cfg) return;
+  if(serverDown){ viewDirty = true; return; }
+  if(viewSaving){ viewDirty = true; return; }
+  const patch = currentView();
+  if(sameView(cfg.ui && cfg.ui.view, patch)){ viewDirty = false; return; }
+  viewSaving = true; viewDirty = false;
+  let ok = false, saved = null;
+  try{
+    const r = await fetch('/api/view', {method:'POST', headers:{'Content-Type':'application/json'},
+                                        body: JSON.stringify(patch)});
+    const data = await r.json().catch(() => null);
+    saved = data && data.view;
+    ok = r.ok && !!(data && data.ok && data.verified) && sameView(saved, patch);
+  }catch(e){ ok = false; }
+  viewSaving = false;
+  if(ok){
+    cfg.ui = cfg.ui || {};
+    cfg.ui.view = saved;
+    showToast(t('viewSaved'));
+  } else {
+    showToast(t('viewSaveFailed'), true);
+  }
+  if(viewDirty) scheduleViewSave();
 }
 
 // ---- interactions ----
 function setMetric(m){
   metric = m;
-  document.querySelectorAll('#metrics button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
-  hover = null; drawChart();
+  if(!isGroup(cur())) lastDeviceMetric = m;
+  syncMetricButtons();
+  hover = null; hoverY = null; drawChart();
+  scheduleViewSave();
 }
 document.querySelectorAll('#metrics button').forEach(b => b.onclick = () => setMetric(b.dataset.m));
-$('windowsel').onchange = e => {
-  winSec = Number(e.target.value);
-  hover = null;
-  loadHistory(sel);
-  drawChart();
+$('winquick').addEventListener('click', e => {
+  const b = e.target.closest('button[data-win]');
+  if(b) setWindow(b.dataset.win);
+});
+$('winmore').onchange = e => {
+  if(e.target.value === ''){ syncWindowControls(); return; }
+  setWindow(e.target.value);
 };
+$('winall').onchange = e => setWindow(e.target.value);
 $('edit').onclick = () => { const x = cur(); if(isGroup(x)) openModal(x); };
 $('remove').onclick = async () => {
   const x = cur();
@@ -1346,21 +2202,75 @@ $('remove').onclick = async () => {
   sel = null;
   await poll();
 };
-$('showscan').onclick = () => {
+function setMenu(open){
+  const menu = $('scanmenu'), btn = $('menubtn');
+  if(!menu || !btn) return;
+  menu.classList.toggle('open', open);
+  btn.setAttribute('aria-expanded', String(open));
+  btn.textContent = open ? '✕' : '☰';
+  const label = t(open ? 'close' : 'menu');
+  btn.setAttribute('aria-label', label);
+  btn.title = label;
+}
+$('menubtn').onclick = () => setMenu(!$('scanmenu').classList.contains('open'));
+document.addEventListener('click', e => {
+  if($('scanmenu').classList.contains('open') && !e.target.closest('.scanbar')) setMenu(false);
+});
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape'){
+    setMenu(false);
+    if($('offlinemodal').classList.contains('show')) bootCancel();
+  }
+});
+window.addEventListener('resize', () => { if(window.innerWidth > 640) setMenu(false); });
+
+function openScan(){
+  setMenu(false);
   $('smodal').classList.add('show');
   scanRenderedTs = -1;
   renderScan();
-};
+}
+
+async function manualScan(btn){
+  if(btn && btn.disabled) return;
+  if(btn){ btn.disabled = true; btn.textContent = t('scanning'); }
+  const res = await postJson('/api/scan');
+  if(res.ok && res.data && res.data.ok){
+    const n = res.data.count || 0;
+    showToast(n ? t('scanDone', {n}) : t('nothingFound'));
+  } else {
+    showToast(t('scanFailed', {err: apiError(res)}), true);
+  }
+  await poll();
+  battTs = -1; scanRenderedTs = -1;
+  renderBatteryList(); renderScan();
+  if(btn && btn.isConnected){ btn.disabled = false; btn.textContent = t('scanNow'); }
+}
+$('sscan').onclick = () => manualScan($('sscan'));
+$('bscan').onclick = () => manualScan($('bscan'));
+$('menusettings').onclick = () => { setMenu(false); openSettings(); };
 $('chkOnlyBat').onchange = async e => {
   if(!cfg) return;
+  const want = e.target.checked;
   cfg.ui = cfg.ui || {};
   cfg.ui.scan = cfg.ui.scan || {};
-  cfg.ui.scan.onlyBatteries = e.target.checked;
+  cfg.ui.scan.onlyBatteries = want;
+  let ok = false;
   try{
     const r = await fetch('/api/config', {method:'POST', headers:{'Content-Type':'application/json'},
                                          body: JSON.stringify(cfg)});
-    if(r.ok) cfg = await r.json();
-  }catch(err){}
+    const data = await r.json().catch(() => null);
+    if(r.ok && data && data.ok && data.verified && data.config && data.config.ui){
+      cfg = data.config;
+      ok = !!cfg.ui.scan.onlyBatteries === want;
+    }
+  }catch(err){ ok = false; }
+  if(ok){
+    showToast(t('viewSaved'));
+  } else {
+    cfg.ui.scan.onlyBatteries = !want;
+    showToast(t('viewSaveFailed'), true);
+  }
   scanRenderedTs = -1;
   renderScan();
 };
@@ -1377,17 +2287,17 @@ $('clearhist').onclick = async () => {
   await poll();
   scanRenderedTs = -1; renderScan();
 };
-$('scanlist').addEventListener('click', async ev => {
+$('scanlist').addEventListener('click', ev => {
   const b = ev.target.closest('[data-add]');
   if(!b || b.disabled) return;
-  const addr = b.dataset.add;
-  b.disabled = true; b.textContent = '…';
-  try{
-    await fetch('/api/devices', {method:'POST', headers:{'Content-Type':'application/json'},
-                                body: JSON.stringify({address: addr})});
-  }catch(e){}
-  await poll();
-  scanRenderedTs = -1; renderScan();
+  addDeviceByAddr(b.dataset.add, b);
+});
+$('scanlist').addEventListener('click', ev => {
+  if(ev.target.closest('[data-add]')) return;
+  const row = ev.target.closest('.row[data-id][data-known="1"]');
+  if(!row) return;
+  select(row.dataset.id);
+  $('smodal').classList.remove('show');
 });
 $('gcancel').onclick = closeModal;
 $('gsave').onclick = saveModal;
@@ -1399,14 +2309,42 @@ $('modal').addEventListener('click', e => { if(e.target === $('modal')) closeMod
 $('qok').onclick = () => closeAsk(true);
 $('qcancel').onclick = () => closeAsk(false);
 $('qmodal').addEventListener('click', e => { if(e.target === $('qmodal')) closeAsk(false); });
-$('settings').onclick = openSettings;
+$('settings').onclick = () => { setMenu(false); openSettings(); };
 $('cfgAbout').onclick = openAbout;
-$('theme').onchange = e => {
-  themePref = e.target.value;
-  localStorage.setItem('pq_theme', themePref);
+function setThemePref(v){
+  themePref = v;
+  localStorage.setItem('pq_theme', v);
   onThemeChange();
+}
+function setLangPref(v){
+  lang = v;
+  localStorage.setItem('pq_lang', lang);
+  const keepWin = $('cfgWindow') ? $('cfgWindow').value : null;
+  buildChartControls();
+  if(keepWin !== null && $('cfgWindow')) $('cfgWindow').value = keepWin;
+  applyStatic();
+  setMenu($('scanmenu').classList.contains('open'));
+  render();
+  renderScan();
+  renderUpdateStatus();
+  renderUpdateBanner();
+  if($('bmodal').classList.contains('show')) renderBatteryList();
+  if(hist[sel]) drawChart();
+}
+$('theme').onchange = e => setThemePref(e.target.value);
+document.querySelectorAll('input[name=theme]').forEach(r => r.onchange = () => setThemePref(r.value));
+$('lang').onchange = e => setLangPref(e.target.value);
+document.querySelectorAll('input[name=lang]').forEach(r => r.onchange = () => setLangPref(r.value));
+$('aboutbtn').onclick = () => { setMenu(false); openAbout(); };
+$('offlineretry').onclick = bootRetry;
+$('offlinecancel').onclick = bootCancel;
+$('aboutCheck').onclick = e => { e.preventDefault(); checkUpdates(true); };
+$('updclose').onclick = () => {
+  if(updateInfo && updateInfo.latest){
+    localStorage.setItem('pq_update_dismissed', String(updateInfo.latest));
+  }
+  $('updbanner').style.display = 'none';
 };
-$('aboutbtn').onclick = openAbout;
 $('aclose').onclick = () => $('amodal').classList.remove('show');
 $('amodal').addEventListener('click', e => { if(e.target === $('amodal')) $('amodal').classList.remove('show'); });
 $('cfgPalAdd').onclick = () => {
@@ -1414,50 +2352,118 @@ $('cfgPalAdd').onclick = () => {
   paletteDraft.push(PALETTE_DEF[paletteDraft.length % PALETTE_DEF.length]);
   renderPaletteEditor();
 };
-$('chartstyle').onchange = e => {
-  chartStyle = e.target.value;
-  localStorage.setItem('pq_style', chartStyle);
+$('chartstyle').addEventListener('click', e => {
+  const b = e.target.closest('button[data-style]');
+  if(!b) return;
+  chartStyle = VIEW_STYLES.includes(b.dataset.style) ? b.dataset.style : 'line';
+  syncStyleControls();
   drawChart();
-};
+  scheduleViewSave();
+});
 $('cfgCancel').onclick = () => $('cfgmodal').classList.remove('show');
 $('cfgSave').onclick = saveSettings;
 $('cfgmodal').addEventListener('click', e => { if(e.target === $('cfgmodal')) $('cfgmodal').classList.remove('show'); });
-$('lang').onchange = e => {
-  lang = e.target.value;
-  localStorage.setItem('pq_lang', lang);
-  applyStatic();
-  render();
-  renderScan();
-  if($('bmodal').classList.contains('show')) renderBatteryList();
-  if(hist[sel]) drawChart();
-};
 
-$('chart').addEventListener('mousemove', ev => {
+const chartEl = $('chart');
+chartEl.addEventListener('mousemove', ev => {
   if(!geom) return;
-  const rect = ev.target.getBoundingClientRect();
-  const x = ev.clientX - rect.left;
+  const rect = chartEl.getBoundingClientRect();
+  const x = Math.max(0, Math.min(geom.W, ev.clientX - rect.left));
+  if(dragSel){
+    dragSel.x1 = x; drawChart(); return;
+  }
+  if(panning) return;
   const {P, W, t0, t1, pts} = geom;
   const tt = t0 + Math.max(0, Math.min(1, (x - P.l)/(W - P.l - P.r))) * (t1 - t0);
   let best = 0, bd = Infinity;
   pts.forEach((p,i) => { const dd = Math.abs(p[0]-tt); if(dd < bd){ bd = dd; best = i; } });
-  hover = best; drawChart();
+  hover = best; hoverY = ev.clientY - rect.top; drawChart();
 });
-$('chart').addEventListener('mouseleave', () => { hover = null; drawChart(); });
+chartEl.addEventListener('mouseleave', () => {
+  if(dragSel || panning) return;
+  hover = null; hoverY = null; drawChart();
+});
+chartEl.addEventListener('mousedown', ev => {
+  if(ev.button !== 0 || !geom) return;
+  const x = Math.max(0, ev.clientX - chartEl.getBoundingClientRect().left);
+  if(!inPlot(x, geom)) return;
+  hover = null; hoverY = null;
+  if(ev.shiftKey){
+    // pan works from any preset: unpanned means the visible range itself
+    panning = {x, from: zoom ? zoom.from : geom.t0, to: zoom ? zoom.to : geom.t1};
+    chartEl.style.cursor = 'grabbing';
+  } else {
+    dragSel = {x0: x, x1: x};
+  }
+  ev.preventDefault();
+  drawChart();
+});
+window.addEventListener('mouseup', ev => {
+  if(dragSel){
+    const d = dragSel; dragSel = null;
+    if(geom && Math.abs(d.x1 - d.x0) > 8){
+      setZoom(plotTime(Math.min(d.x0, d.x1), geom), plotTime(Math.max(d.x0, d.x1), geom));
+    } else drawChart();
+  }
+  if(panning && geom){
+    const p = panning; panning = null;
+    chartEl.style.cursor = '';
+    const x = Math.max(geom.P.l, Math.min(geom.W - geom.P.r,
+              ev.clientX - chartEl.getBoundingClientRect().left));
+    const dt = (x - p.x) / Math.max(1, geom.W - geom.P.l - geom.P.r) * (p.to - p.from);
+    if(Math.abs(dt) > 0.5) setZoom(p.from - dt, p.to - dt);
+    else drawChart();
+  }
+});
+chartEl.addEventListener('wheel', ev => {
+  // plain wheel keeps scrolling the page; zoom only with Ctrl held
+  if(!ev.ctrlKey || !geom) return;
+  const x = ev.clientX - chartEl.getBoundingClientRect().left;
+  if(!inPlot(x, geom)) return;
+  ev.preventDefault();
+  const span = geom.t1 - geom.t0;
+  if(span <= 0) return;
+  const anchor = plotTime(x, geom);
+  const ratio = Math.max(0, Math.min(1, (anchor - geom.t0) / span));
+  const factor = ev.deltaY < 0 ? 0.8 : 1.25;
+  const from = anchor - span * factor * ratio;
+  setZoom(from, from + span * factor);
+}, {passive: false});
+chartEl.addEventListener('dblclick', () => resetZoom());
+$('zoomreset').onclick = () => resetZoom();
 window.addEventListener('resize', () => drawChart());
 
 async function boot(){
-  try{
-    cfg = await (await fetch('/api/config', {cache:'no-store'})).json();
-  }catch(e){ cfg = null; }
-  applyConfig();
-  chartStyle = localStorage.getItem('pq_style') || 'line';
-  $('chartstyle').value = chartStyle;
+  bootStartTs = performance.now();
+  startBootTimer();
+  const get = async path => {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 6000);
+    try{
+      const r = await fetch(path, {cache:'no-store', signal: ctl.signal});
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      return await r.json();
+    }
+    catch(e){ return null; }
+    finally{ clearTimeout(timer); }
+  };
+  // config, meta and the first data snapshot in parallel: the boot mask goes
+  // away as soon as the data is on screen, not after three sequential round-trips
+  const [c, m, d] = await Promise.all([get('/api/config'), get('/api/meta'), get('/api/data')]);
+  cfg = c; uiMeta = m;
   lang = localStorage.getItem('pq_lang') || (cfg && cfg.ui && cfg.ui.language) || 'en';
+  buildChartControls();
+  applyConfig();
   applyStatic();
   applyTheme();
-  poll();
+  if(d){
+    applyData(d);   // bootGate decides whether the mask stays up
+  } else {
+    poll();
+  }
   setInterval(poll, 1000);
-  setInterval(() => { if(sel) loadHistory(sel); }, 2000);
+  setInterval(() => { if(sel) loadHistory(sel, true); }, 2000);
+  setTimeout(() => checkUpdates(false, true), 1500);
 }
 boot();
 </script></body></html>

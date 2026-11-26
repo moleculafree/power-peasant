@@ -79,6 +79,38 @@ class ValidFrameTest(unittest.TestCase):
         self.assertFalse(pq.valid(bytes(fr)))
 
 
+class BatteryNameTest(unittest.TestCase):
+    def test_known_brand_prefixes(self):
+        for name in ("P-12100BNNA70-B00143", "R-12280BNN200-B00143",
+                     "LT-12100BNN200", "L-12V100-100", "S-12320", "SS-12320"):
+            self.assertTrue(pq.is_battery_name(name), name)
+
+    def test_other_devices_are_rejected(self):
+        for name in ("JK-BD4A20S4P", "TV-OLED", "65\" OLED", "", "P-123",
+                     "LT-", "L-V100"):
+            self.assertFalse(pq.is_battery_name(name), name)
+
+
+class VersionFrameTest(unittest.TestCase):
+    def test_parses_firmware_date_and_hardware(self):
+        fr = bytearray(24)
+        fr[5:7] = b"\x55\xaa"
+        fr[8:10] = (1).to_bytes(2, "little")
+        fr[10:12] = (2).to_bytes(2, "little")
+        fr[12:14] = (3).to_bytes(2, "little")
+        fr[14:16] = (2024).to_bytes(2, "little")
+        fr[16] = 8
+        fr[17] = 27
+        fr[18:24] = b"T24-10"
+        info = pq.parse_version_response(bytes(fr))
+        self.assertEqual(info["version"], "1.2.3")
+        self.assertEqual(info["date"], "2024-8-27")
+        self.assertEqual(info["hardware"], "T24-10")
+
+    def test_rejects_garbage(self):
+        self.assertEqual(pq.parse_version_response(b"\x00" * 24), {})
+
+
 class DecodeTest(unittest.TestCase):
     def test_decodes_all_fields(self):
         d = pq.decode(make_frame())
