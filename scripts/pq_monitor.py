@@ -16,6 +16,7 @@ Protocol: service FFE0, write FFE2, notify FFE1, request "00 00 04 01 13 55 AA 1
 
 import argparse
 import asyncio
+import getpass
 import mimetypes
 import csv
 import json
@@ -26,6 +27,7 @@ import socket
 import sys
 import threading
 import time
+import traceback
 import uuid
 import webbrowser
 from collections import deque
@@ -33,7 +35,7 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 from bleak import BleakClient, BleakScanner
 
@@ -76,29 +78,38 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 GROUPS_FILE = DATA_DIR / "groups.json"
 IGNORED_FILE = DATA_DIR / "ignored.json"
 SEEN_FILE = DATA_DIR / "scan_history.json"
-CONFIG_FILE = ROOT / "assets" / "config.json"
-if not _writable_dir(ROOT / "assets"):
-    CONFIG_FILE = DATA_DIR / "config.json"
+DEVICES_FILE = DATA_DIR / "devices.json"
+LAST_VALUES_FILE = DATA_DIR / "last_values.json"
+UPDATE_FILE = DATA_DIR / "update_check.json"
+CONFIG_FILE = DATA_DIR / "config.json"
+CONFIG_TEMPLATE = ROOT / "assets" / "config.json"
 
 HISTORY_MAX = 4000       # in-memory points per source (~2 h at 2 s)
 MAX_POINTS = 700         # max points returned to the chart
 LOG_INTERVAL = 10.0      # seconds between CSV rows
 LOAD_HOURS = 2.0         # how much CSV history to preload
 
-HISTORY_CACHE = {}       # (path, window) -> (expires_monotonic, payload)
+HISTORY_CACHE = {}       # (path, window, span) -> (expires_monotonic, payload)
+HISTORY_CACHE_MAX = 128
 HISTORY_CACHE_LOCK = threading.Lock()
 
 DEVICES = {}             # address -> entry
 GROUPS = []              # [{id,name,mode,members,history,logger,last_log,data}]
 SCAN = {"ts": 0.0, "items": []}   # everything seen in the last radio scan
+SCAN_LOCK = asyncio.Lock()        # one radio scan at a time (manual + background)
+SCAN_MIN_GAP = 3.0                # reuse a scan younger than this instead of rescanning
 BT_STATUS = {"ok": None, "reason": None, "message": None, "checked": 0}
 SEEN = {}                # address -> discovery history record
 SEEN_MAX = 500
+LAST_VALUES = {}         # address -> {"name", "data", "updated"} last good frame
+SAVED_DEVICES = {}       # address -> {"name", "manual"} monitored batteries
 IGNORED = set()          # display names the user removed from monitoring
 LOCK = threading.Lock()
 POLL_INTERVAL = 2.0
 SHOW_ALL = False         # --all: also treat unnamed FFE0 devices as batteries
 MAIN_LOOP = None         # asyncio loop, used by the HTTP thread for manual adds
+DISCOVERY_DONE = False   # first radio scan finished; the UI can stop its boot spinner
+START_TS = time.time()   # server uptime for the dashboard
 
 CSV_HEADER = (["epoch", "iso", "pack_v", "current_a", "power_w", "soc", "soh",
                "rem_ah", "fcc_ah", "cell_temp", "mos_temp", "cycles", "discharged_ah"]
@@ -112,6 +123,7 @@ DEFAULT_CONFIG = {
             "cellMin": "#f2a33c",
             "cellNormal": "#58a6ff",
             "cellCritical": "#ef5b5b",
+            "chartNegative": "#4dd0e1",
             "chartPalette": ["#58a6ff", "#35d07f", "#f2a33c", "#c792ea",
                              "#ef5b5b", "#4dd0e1", "#f78fb3", "#a3e635"],
         },
@@ -119,6 +131,7 @@ DEFAULT_CONFIG = {
         "thresholds": {"cellDeltaOkMv": 10, "cellDeltaWarnMv": 30,
                        "packSpreadOkMv": 60, "packSpreadBadMv": 200},
         "chart": {"defaultWindowSec": 600},
+        "view": {"metric": "cells", "chartStyle": "line", "windowSec": 600, "selected": ""},
         "scan": {"onlyBatteries": True},
         "about": {"repo": "https://github.com/moleculafree/power-peasant", "donate": ""},
     },
@@ -149,12 +162,35 @@ def _merge_cfg(base: dict, over) -> dict:
 
 _HEX_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 
+VIEW_METRICS = ("cells", "pack", "current", "soc")
+VIEW_STYLES = ("line", "area", "step", "bars", "dots")
+VIEW_WINDOWS = (0, 300, 600, 1800, 3600, 21600, 86400, 604800,
+                2592000, 7776000, 15552000, 31536000, 63072000)
+
+
+def _nearest_window(value, fallback: int = 600) -> int:
+    """Snap a window length to one the chart selector offers."""
+    try:
+        sec = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    if sec <= 0:
+        return 0
+    return min(VIEW_WINDOWS[1:], key=lambda w: abs(w - sec))
+
+
+def ui_meta() -> dict:
+    """Single source of truth for the chart controls offered by the dashboard."""
+    return {"windows": list(VIEW_WINDOWS),
+            "styles": list(VIEW_STYLES),
+            "metrics": list(VIEW_METRICS)}
+
 
 def _clean_config(cfg: dict) -> dict:
     """Clamp numbers and validate colors so a bad edit cannot break the UI."""
     ui = cfg["ui"]
     c = ui["colors"]
-    for key in ("cellMax", "cellMin", "cellNormal", "cellCritical"):
+    for key in ("cellMax", "cellMin", "cellNormal", "cellCritical", "chartNegative"):
         if not _HEX_RE.match(str(c.get(key, ""))):
             c[key] = DEFAULT_CONFIG["ui"]["colors"][key]
     palette = [x for x in c.get("chartPalette", []) if _HEX_RE.match(str(x))]
@@ -167,6 +203,7 @@ def _clean_config(cfg: dict) -> dict:
         return max(lo, min(hi, float(val)))
 
     cells, th, ch, srv = ui["cells"], ui["thresholds"], ui["chart"], cfg["server"]
+    view = ui["view"]
     cells["scaleMinV"] = num(cells, "scaleMinV", 2.0, 4.0, 3.00)
     cells["scaleMaxV"] = num(cells, "scaleMaxV", 2.0, 5.0, 3.45)
     if cells["scaleMaxV"] <= cells["scaleMinV"] + 0.01:
@@ -177,6 +214,13 @@ def _clean_config(cfg: dict) -> dict:
     th["packSpreadOkMv"] = int(num(th, "packSpreadOkMv", 0, 5000, 60))
     th["packSpreadBadMv"] = max(th["packSpreadOkMv"], int(num(th, "packSpreadBadMv", 0, 10000, 200)))
     ch["defaultWindowSec"] = int(num(ch, "defaultWindowSec", 0, 63072000, 600))
+    if view.get("metric") not in VIEW_METRICS:
+        view["metric"] = DEFAULT_CONFIG["ui"]["view"]["metric"]
+    if view.get("chartStyle") not in VIEW_STYLES:
+        view["chartStyle"] = DEFAULT_CONFIG["ui"]["view"]["chartStyle"]
+    view["windowSec"] = _nearest_window(view.get("windowSec"), ch["defaultWindowSec"])
+    selected = view.get("selected")
+    view["selected"] = selected.strip()[:128] if isinstance(selected, str) else ""
     srv["pollIntervalSec"] = num(srv, "pollIntervalSec", 0.5, 60, 2.0)
     srv["logIntervalSec"] = num(srv, "logIntervalSec", 0, 3600, 10.0)
     srv["historyHours"] = num(srv, "historyHours", 0.1, 48, 2.0)
@@ -186,7 +230,7 @@ def _clean_config(cfg: dict) -> dict:
 
 
 def get_config() -> dict:
-    """Read assets/config.json (cached by mtime); fall back to defaults on error."""
+    """Read data/config.json (cached by mtime); fall back to defaults on error."""
     try:
         mtime = CONFIG_FILE.stat().st_mtime
     except OSError:
@@ -198,6 +242,11 @@ def get_config() -> dict:
         if not isinstance(raw, dict):
             raise ValueError("root must be a JSON object")
         cfg = _merge_cfg(DEFAULT_CONFIG, raw)
+        raw_ui = raw.get("ui")
+        if not (isinstance(raw_ui, dict) and "view" in raw_ui):
+            # no saved view yet: honour the configured default window on first run
+            cfg["ui"]["view"]["windowSec"] = int(
+                _nearest_window(cfg["ui"]["chart"]["defaultWindowSec"]))
         cfg = _clean_config(cfg)
     except (OSError, ValueError) as exc:
         print(f"[-] config.json: {exc} (using defaults)")
@@ -205,6 +254,68 @@ def get_config() -> dict:
     _cfg_cache["mtime"] = mtime
     _cfg_cache["data"] = cfg
     return cfg
+
+
+CONFIG_LOCK = threading.Lock()
+
+
+def save_config(cfg: dict) -> dict:
+    """Write config.json atomically and verify that the file reads back as saved."""
+    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(cfg, ensure_ascii=False, indent=2) + "\n"
+    tmp = CONFIG_FILE.with_name(CONFIG_FILE.name + ".tmp")
+    try:
+        with open(tmp, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, CONFIG_FILE)
+        back = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+        if back != cfg:
+            raise OSError("config.json read-back mismatch")
+    finally:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+    _cfg_cache["mtime"] = None
+    _cfg_cache["data"] = None
+    return cfg
+
+
+def ensure_config() -> None:
+    """Create data/config.json on first start.
+
+    A writable config used to live in assets/config.json; when that file exists,
+    copy it once so settings survive the switch to the data folder. Everything
+    is written next to the app (or in the fallback data dir for read-only installs).
+    """
+    if CONFIG_FILE.exists():
+        return
+    try:
+        if CONFIG_TEMPLATE.exists():
+            CONFIG_FILE.write_bytes(CONFIG_TEMPLATE.read_bytes())
+        else:
+            CONFIG_FILE.write_text(
+                json.dumps(DEFAULT_CONFIG, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8", newline="\n")
+    except OSError as exc:
+        print(f"[-] config.json: {exc}")
+
+
+def set_view(patch: dict) -> dict:
+    """Merge a chart/filter state patch into ui.view and save it."""
+    if not isinstance(patch, dict):
+        raise ValueError("view must be a JSON object")
+    with CONFIG_LOCK:
+        cfg = _merge_cfg(DEFAULT_CONFIG, get_config())
+        view = cfg["ui"]["view"]
+        for key in ("metric", "chartStyle", "windowSec", "selected"):
+            if key in patch:
+                view[key] = patch[key]
+        cfg = _clean_config(cfg)
+        save_config(cfg)
+    return cfg["ui"]["view"]
 
 
 _URL_RE = re.compile(r"^https?://", re.IGNORECASE)
@@ -278,6 +389,86 @@ def about_info() -> dict:
     return info
 
 
+UPDATE_API = "https://api.github.com/repos/moleculafree/power-peasant/releases/latest"
+UPDATE_TTL = 24 * 3600
+
+
+def _version_tuple(value):
+    match = re.match(r"^v?(\d+)\.(\d+)\.(\d+)$", str(value or "").strip())
+    if not match:
+        return None
+    return tuple(int(part) for part in match.groups())
+
+
+def _read_update_cache():
+    try:
+        data = json.loads(UPDATE_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _save_update_cache(data: dict) -> None:
+    try:
+        UPDATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        UPDATE_FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def check_for_update(force: bool = False) -> dict:
+    """Compare the current version with the latest GitHub release."""
+    current = str(about_info().get("version") or "dev")
+    current_tuple = _version_tuple(current)
+    now = time.time()
+    if current_tuple is None:
+        return {"ok": True, "current": current, "update": False,
+                "disabled": True, "checked": now}
+
+    cached = _read_update_cache()
+    if (not force and cached
+            and cached.get("current") == current
+            and now - float(cached.get("checked") or 0) < UPDATE_TTL):
+        result = dict(cached)
+        result["cached"] = True
+        return result
+
+    try:
+        request = Request(UPDATE_API, headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": f"PowerPeasant/{current}",
+        })
+        with urlopen(request, timeout=5) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("unexpected release payload")
+        tag = str(data.get("tag_name") or "").strip()
+        latest_tuple = _version_tuple(tag)
+        if latest_tuple is None:
+            raise ValueError(f"unexpected release tag: {tag!r}")
+        latest_tag = tag if tag.lower().startswith("v") else f"v{tag}"
+        url = data.get("html_url")
+        if not isinstance(url, str) or not url.startswith(
+                "https://github.com/moleculafree/power-peasant/releases/"):
+            url = f"https://github.com/moleculafree/power-peasant/releases/tag/{latest_tag}"
+        result = {
+            "ok": True,
+            "current": current,
+            "latest": latest_tag[1:],
+            "latest_tag": latest_tag,
+            "update": latest_tuple > current_tuple,
+            "url": url,
+            "published_at": data.get("published_at"),
+            "checked": now,
+            "cached": False,
+        }
+        _save_update_cache(result)
+        return result
+    except Exception as exc:
+        return {"ok": False, "current": current, "error": str(exc),
+                "checked": now, "cached": False}
+
+
 # ---------------------------------------------------------------- protocol ---
 
 def request_frame(cmd: int) -> bytes:
@@ -344,6 +535,19 @@ def decode(fr: bytes) -> dict:
         "balance_cells": [i + 1 for i in range(len(cells)) if balance_mask & (1 << i)],
         "state": "charging" if current > 0.05 else ("discharging" if current < -0.05 else "idle"),
     }
+
+
+def parse_version_response(fr: bytes) -> dict:
+    """Firmware/manufacture date/hardware string from the 0x16 response."""
+    if len(fr) < 18 or fr[5:7] != b"\x55\xaa":
+        return {}
+    body = fr[8:]
+    if len(body) < 10:
+        return {}
+    text = "".join(chr(b) for b in body[10:] if 32 <= b <= 126).strip("\x00 ")
+    return {"version": f"{u16(body, 0)}.{u16(body, 2)}.{u16(body, 4)}",
+            "date": f"{u16(body, 6)}-{body[8]}-{body[9]}",
+            "hardware": text[:64] or None}
 
 
 # --------------------------------------------------------------- csv store ---
@@ -441,6 +645,82 @@ def load_log_points(logger, hours: float) -> list:
         pts.extend(load_points(path, hours))
     pts.sort(key=lambda p: p[0])
     return pts[-HISTORY_MAX:]
+
+
+def _last_csv_line(path: Path, chunk: int = 65536) -> str | None:
+    """Last complete data line, read from the tail of the file."""
+    try:
+        size = path.stat().st_size
+        if size == 0:
+            return None
+        with open(path, "rb") as f:
+            f.seek(max(0, size - chunk))
+            raw = f.read()
+    except OSError:
+        return None
+    if not raw.endswith(b"\n"):
+        # a partially written row must not be mistaken for a measurement
+        raw = raw[:raw.rfind(b"\n") + 1]
+    lines = raw.decode("utf-8", "ignore").splitlines()
+    if size > chunk and lines:
+        lines = lines[1:]          # the first line was cut by the tail read
+    for line in reversed(lines):
+        if line.strip() and not line.startswith("epoch,"):
+            return line
+    return None
+
+
+def data_from_csv_line(line: str) -> dict | None:
+    """Rebuild the decode() payload from one CSV row (used when offline)."""
+    parts = line.split(",")
+    if len(parts) < 6:
+        return None
+    try:
+        ts = float(parts[0])
+        pack_v = float(parts[2])
+        current = float(parts[3])
+        power = float(parts[4]) if parts[4] else pack_v * current
+        soc = int(float(parts[5])) if parts[5] else 0
+        cells = [round(float(x) * 1000) for x in parts[13:29] if x.strip()]
+        balance = [int(x) for x in parts[29].split() if x.isdigit()] if len(parts) > 29 else []
+    except (ValueError, IndexError):
+        return None
+    mask = 0
+    for cell in balance:
+        if 1 <= cell <= 32:
+            mask |= 1 << (cell - 1)
+    return {
+        "pack_mv": round(pack_v * 1000),
+        "cells_mv": cells,
+        "delta_mv": (max(cells) - min(cells)) if cells else None,
+        "current_a": current,
+        "power_w": power,
+        "soc": soc,
+        "soh": int(float(parts[6])) if parts[6] else None,
+        "remaining_ah": float(parts[7]) if parts[7] else 0.0,
+        "fcc_ah": float(parts[8]) if parts[8] else 0.0,
+        "cell_temp_c": int(float(parts[9])) if parts[9] else None,
+        "mos_temp_c": int(float(parts[10])) if parts[10] else None,
+        "cycles": int(float(parts[11])) if parts[11] else 0,
+        "discharged_ah": float(parts[12]) if parts[12] else 0,
+        "balance_mask": mask,
+        "balance_cells": balance,
+        "state": "charging" if current > 0.05 else ("discharging" if current < -0.05 else "idle"),
+        "from_csv": True,
+        "csv_ts": ts,
+    }
+
+
+def csv_last_record(logger) -> tuple[dict, float] | None:
+    """Newest decodable row across the logger's monthly files."""
+    for path in reversed(logger.files()):
+        line = _last_csv_line(path)
+        if not line:
+            continue
+        data = data_from_csv_line(line)
+        if data is not None:
+            return data, float(data.pop("csv_ts", time.time()))
+    return None
 
 
 def _line_ts(line: str):
@@ -610,8 +890,8 @@ def upgrade_monthly_csvs(directory: Path | None = None) -> list:
     return upgraded
 
 
-def _csv_point(line: str):
-    """Parse one CSV row into [ts, pack_v, current_a, soc] (no cells)."""
+def _csv_point(line: str, with_cells: bool = False):
+    """Parse one CSV row into [ts, pack_v, current_a, soc] plus cell voltages."""
     parts = line.split(",")
     if len(parts) < 6:
         return None
@@ -620,9 +900,13 @@ def _csv_point(line: str):
         pack_v = float(parts[2])
         current = float(parts[3])
         soc = int(float(parts[5])) if parts[5] else 0
+        # keep the same cell parsing as load_points() so memory and CSV
+        # payloads carry identical series
+        cells = ([round(float(x), 3) for x in parts[13:29] if x.strip() != ""]
+                 if with_cells else [])
     except (ValueError, IndexError):
         return None
-    return [round(ts, 1), pack_v, current, soc]
+    return [round(ts, 1), pack_v, current, soc] + cells
 
 
 def _iter_csv_lines(path: Path):
@@ -701,14 +985,23 @@ def _tail_text(path: Path, start_ts: float, chunk: int = 1_048_576) -> str:
 
 def _add_bucket(buckets: dict, point: list, start: float, step: float) -> None:
     idx = int((point[0] - start) / step)
+    cells = point[4:]
     acc = buckets.get(idx)
     if acc is None:
-        buckets[idx] = [1, point[1], point[2], point[3]]
-    else:
-        acc[0] += 1
-        acc[1] += point[1]
-        acc[2] += point[2]
-        acc[3] += point[3]
+        buckets[idx] = [1, point[1], point[2], point[3], list(cells), [1] * len(cells)]
+        return
+    acc[0] += 1
+    acc[1] += point[1]
+    acc[2] += point[2]
+    acc[3] += point[3]
+    sums, counts = acc[4], acc[5]
+    for i, value in enumerate(cells):
+        if i < len(sums):
+            sums[i] += value
+            counts[i] += 1
+        else:
+            sums.append(value)
+            counts.append(1)
 
 
 def _collect_history(lines, start: float, end: float, max_points: int = MAX_POINTS):
@@ -722,7 +1015,7 @@ def _collect_history(lines, start: float, end: float, max_points: int = MAX_POIN
     seen_from = seen_to = None
     span = max(0.001, end - start)
     for line in lines:
-        point = _csv_point(line)
+        point = _csv_point(line, with_cells=True)
         if point is None:
             continue
         ts = point[0]
@@ -745,9 +1038,12 @@ def _collect_history(lines, start: float, end: float, max_points: int = MAX_POIN
         return raw, 0.0, seen_from, seen_to
     pts = []
     for idx in sorted(buckets):
-        n, pack_sum, cur_sum, soc_sum = buckets[idx]
-        pts.append([round(start + (idx + 0.5) * step, 1),
-                    round(pack_sum / n, 3), round(cur_sum / n, 3), round(soc_sum / n)])
+        n, pack_sum, cur_sum, soc_sum, cell_sums, cell_counts = buckets[idx]
+        row = [round(start + (idx + 0.5) * step, 1),
+               round(pack_sum / n, 3), round(cur_sum / n, 3), round(soc_sum / n)]
+        row.extend(round(total / count, 3)
+                   for total, count in zip(cell_sums, cell_counts) if count)
+        pts.append(row)
     return pts, step, seen_from, seen_to
 
 
@@ -757,8 +1053,15 @@ def _log_paths(paths) -> list:
     return [Path(p) for p in paths]
 
 
-def read_csv_history(paths, window: float) -> dict:
-    """Read chart points across monthly CSV files. window=0 means all stored data."""
+def read_csv_history(paths, window: float, start: float | None = None,
+                     end: float | None = None) -> dict:
+    """Read chart points across monthly CSV files.
+
+    Without start/end a positive window is anchored to the newest stored row
+    (not to "now"), so increasing the period always reveals older measurements
+    even when the battery has been offline since then. With start/end an
+    arbitrary range is served, clamped to the data that actually exists.
+    """
     paths = _log_paths(paths)
     usable = []
     for path in paths:
@@ -770,38 +1073,45 @@ def read_csv_history(paths, window: float) -> dict:
     first_ts = usable[0][1]
     last_ts = usable[-1][2]
 
-    if window and window > 0:
-        start = max(first_ts, time.time() - window)
-        end = last_ts
-        if end < start:
+    ranged = start is not None or end is not None
+    if ranged:
+        start = first_ts if start is None else max(float(start), first_ts)
+        end = last_ts if end is None else min(float(end), last_ts)
+        if end <= start:
             return {"points": [], "from": None, "to": None, "step": 0.0}
-
-        def window_lines():
-            for path, first, last in usable:
-                if last < start:
-                    continue
-                if first < start:
-                    text = _tail_text(path, start)
-                    lines = text.splitlines()
-                    if text and not text.endswith("\n") and lines:
-                        lines = lines[:-1]
-                    yield from lines
-                else:
-                    yield from _iter_csv_lines(path)
-
-        pts, step, seen_from, seen_to = _collect_history(
-            window_lines(), start, end)
+    elif window and window > 0:
+        end = last_ts
+        start = end - window
     else:
-        def all_lines():
-            for path, first, last in usable:
-                yield from _iter_csv_lines(path)
+        start, end = first_ts, last_ts
 
-        pts, step, seen_from, seen_to = _collect_history(
-            all_lines(), first_ts, last_ts)
+    def range_lines():
+        for path, first, last in usable:
+            if last < start or (ranged and first > end):
+                continue
+            if first < start:
+                text = _tail_text(path, start)
+                lines = text.splitlines()
+                if text and not text.endswith("\n") and lines:
+                    lines = lines[:-1]
+            else:
+                lines = _iter_csv_lines(path)
+            for line in lines:
+                ts = _line_ts(line)
+                # compare like _csv_point does (rounded to 0.1), otherwise the
+                # last row of the file would look newer than the rounded bound
+                if ts is not None and round(ts, 1) > end:
+                    break       # rows are chronological: nothing newer is needed
+                yield line
+
+    pts, step, seen_from, seen_to = _collect_history(range_lines(), start, end)
     return {"points": pts, "from": seen_from, "to": seen_to, "step": step}
 
 
-def _history_ttl(window: float, paths) -> float:
+def _history_ttl(window: float, paths, span=(0, 0)) -> float:
+    if span[0] or span[1]:
+        # a range that ended long ago never changes; the newest tail still grows
+        return 300.0 if span[1] < time.time() - 3600 else 20.0
     if window > 0:
         if window >= 365 * 86400:
             return 300.0
@@ -827,27 +1137,43 @@ def _history_ttl(window: float, paths) -> float:
     return 300.0
 
 
-def history_from_csv(paths, window: float) -> dict:
+def history_from_csv(paths, window: float = 0, start: float | None = None,
+                     end: float | None = None) -> dict:
     """Cached CSV read: long windows are expensive and change slowly."""
     paths = [p for p in _log_paths(paths) if p.exists()]
     if not paths:
         return {"points": [], "from": None, "to": None, "step": 0.0}
-    key = (tuple(str(p) for p in paths), int(window))
+    span = (round(float(start)) if start is not None else 0,
+            round(float(end)) if end is not None else 0)
+    key = (tuple(str(p) for p in paths), int(window), span)
     now = time.monotonic()
     with HISTORY_CACHE_LOCK:
         cached = HISTORY_CACHE.get(key)
         if cached and cached[0] > now:
             return cached[1]
-    payload = read_csv_history(paths, window)
+    payload = read_csv_history(paths, window, start, end)
     with HISTORY_CACHE_LOCK:
-        if len(HISTORY_CACHE) > 64:
-            HISTORY_CACHE.clear()
-        HISTORY_CACHE[key] = (time.monotonic() + _history_ttl(window, paths), payload)
+        if len(HISTORY_CACHE) > HISTORY_CACHE_MAX:
+            for stale in [k for k, (expires, _) in HISTORY_CACHE.items()
+                          if expires <= now]:
+                HISTORY_CACHE.pop(stale, None)
+            if len(HISTORY_CACHE) > HISTORY_CACHE_MAX:
+                HISTORY_CACHE.clear()
+        HISTORY_CACHE[key] = (time.monotonic() + _history_ttl(window, paths, span),
+                              payload)
     return payload
 
 
-def get_history(ident: str, window: int) -> dict:
-    """Chart payload for a device/group: memory for short windows, CSV for long/All."""
+def get_history(ident: str, window: int, from_ts: float | None = None,
+                to_ts: float | None = None) -> dict:
+    """Chart payload for a device/group.
+
+    Short windows come from memory while it reaches back far enough; longer
+    windows are read from CSV (which keeps the cell voltages as well). The
+    window is anchored to the newest known sample, never to an empty "now".
+    from_ts/to_ts serve an arbitrary zoom range instead of the window presets.
+    """
+    ranged = from_ts is not None or to_ts is not None
     with LOCK:
         if ident in DEVICES:
             entry = DEVICES[ident]
@@ -872,23 +1198,62 @@ def get_history(ident: str, window: int) -> dict:
                 "to": pts[-1][0] if pts else None,
                 "step": step}
 
-    if window > 0:
-        cutoff = time.time() - window
-        fresh = [p for p in mem if p[0] >= cutoff]
-        covered = bool(fresh) and fresh[0][0] <= cutoff + max(30.0, LOG_INTERVAL * 2)
-        if covered or not paths:
-            return memory_payload(fresh)
-        payload = history_from_csv(paths, window)
-    else:
+    def source_bounds():
+        """Whole stored range, so the chart can pan beyond the current window."""
+        seen = [_csv_bounds(p) for p in paths]
+        first = min((f for f, _ in seen if f is not None), default=None)
+        last = max((l for _, l in seen if l is not None), default=None)
+        if mem:
+            # memory carries the newest samples before logging catches up
+            first = mem[0][0] if first is None else min(first, mem[0][0])
+            last = mem[-1][0] if last is None else max(last, mem[-1][0])
+        return {"from": first, "to": last} if first is not None else None
+
+    def with_bounds(payload):
+        return {**payload, "bounds": source_bounds()}
+
+    def merge_tail(payload):
+        """Add memory samples newer than the last CSV row (logging lags by ~10s)."""
+        pts = payload["points"]
+        last = pts[-1][0] if pts else None
+        extra = [p for p in mem
+                 if (last is None or p[0] > last)
+                 and (to_ts is None or p[0] <= to_ts)]
+        if not extra:
+            return payload
+        merged = pts + extra
+        return {"points": merged,
+                "from": merged[0][0],
+                "to": merged[-1][0],
+                "step": payload["step"]}
+
+    if ranged:
         if paths:
-            payload = history_from_csv(paths, 0)
-        else:
-            return memory_payload(mem)
-    if not payload["points"] and mem:
-        fresh = [p for p in mem if not window or p[0] >= time.time() - window]
-        if fresh:
-            return memory_payload(fresh)
-    return payload
+            payload = history_from_csv(paths, 0, from_ts, to_ts)
+            if payload["points"]:
+                return with_bounds(merge_tail(payload))
+        return with_bounds(memory_payload([p for p in mem
+                                           if (from_ts is None or p[0] >= from_ts)
+                                           and (to_ts is None or p[0] <= to_ts)]))
+
+    last = mem[-1][0] if mem else None
+    fresh = [p for p in mem if last is None or p[0] >= last - window] if window > 0 else mem
+
+    if window <= 0:
+        if paths:
+            return with_bounds(merge_tail(history_from_csv(paths, 0)))
+        return with_bounds(memory_payload(mem))
+
+    if last is not None:
+        start = last - window
+        # only trust memory when it actually reaches the start of the window
+        if fresh and mem[0][0] <= start + max(30.0, LOG_INTERVAL * 2):
+            return with_bounds(memory_payload(fresh))
+    if paths:
+        payload = history_from_csv(paths, window)
+        if payload["points"]:
+            return with_bounds(merge_tail(payload))
+    return with_bounds(memory_payload(fresh))
 
 
 # ----------------------------------------------------------------- groups ---
@@ -951,10 +1316,34 @@ def load_groups():
         print(f"[-] groups.json: {exc}")
 
 
+def _group_times(mode: str, members: list):
+    """Seconds to empty/full for a group. Returns (empty, full); idle -> (None, None)."""
+    if not members:
+        return None, None
+    cur = sum(d["current_a"] for d in members)
+    if mode == "series":
+        cur /= len(members)
+    if abs(cur) < 0.1:
+        return None, None
+    if mode == "series":
+        remaining = min(d["remaining_ah"] for d in members)
+        need = max(max(0.0, d["fcc_ah"] - d["remaining_ah"]) for d in members)
+    else:
+        remaining = sum(max(0.0, d["remaining_ah"]) for d in members)
+        need = sum(max(0.0, d["fcc_ah"] - d["remaining_ah"]) for d in members)
+    if cur < 0:
+        return remaining / abs(cur) * 3600.0, None
+    return None, need / cur * 3600.0
+
+
 def aggregate(g: dict) -> dict:
-    """Aggregate current data of a group's members. Call with LOCK held."""
+    """Aggregate a group's members. Call with LOCK held.
+
+    Live members win; when none is connected the last known values are used and
+    the result is flagged `stale`, so the dashboard can show an archived frame.
+    """
     by_name = {e.get("name"): e for e in DEVICES.values()}
-    members, ds = [], []
+    members, live, stale_data = [], [], []
     for name in g["members"]:
         e = by_name.get(name)
         if not e:
@@ -966,14 +1355,20 @@ def aggregate(g: dict) -> dict:
             m.update(
                 pack_v=round(d["pack_mv"] / 1000, 3),
                 current_a=round(d["current_a"], 2),
-                soc=d["soc"],
-                delta_mv=d["delta_mv"],
-                cell_temp_c=d["cell_temp_c"],
-                remaining_ah=round(d["remaining_ah"], 2),
+                soc=d.get("soc"),
+                delta_mv=d.get("delta_mv"),
+                cell_temp_c=d.get("cell_temp_c"),
+                remaining_ah=round(d.get("remaining_ah") or 0, 2),
+                updated=e.get("updated"),
+                stale=not m["connected"],
             )
+            stale_data.append(d)
         members.append(m)
         if m["connected"] and d:
-            ds.append(d)
+            live.append(d)
+
+    use = live or stale_data
+    stale = bool(stale_data) and not live
 
     # configured capacity: last known values of all members, even offline ones
     known_fcc = []
@@ -983,26 +1378,34 @@ def aggregate(g: dict) -> dict:
         if d.get("fcc_ah"):
             known_fcc.append(d["fcc_ah"])
     cap_total = (min(known_fcc) if g["mode"] == "series" else sum(known_fcc)) if known_fcc else 0.0
+    times = [e["updated"] for e in (by_name.get(n) for n in g["members"])
+             if e and e.get("updated") and e.get("data")]
 
     base = {"kind": "group", "mode": g["mode"], "members": members,
-            "members_total": len(g["members"]), "online": len(ds),
-            "partial": len(ds) != len(g["members"]),
+            "members_total": len(g["members"]), "online": len(live),
+            "stale": stale, "updated": max(times) if times else None,
+            "partial": len(live) != len(g["members"]),
             "cap_online_ah": 0.0, "cap_total_ah": round(cap_total, 2),
             "cap_known": len(known_fcc)}
-    if not ds:
+    if not use:
         return base
 
-    pack = sum(d["pack_mv"] for d in ds) / 1000.0
-    cur = sum(d["current_a"] for d in ds)
-    rem = sum(d["remaining_ah"] for d in ds)
-    fcc = sum(d["fcc_ah"] for d in ds)
+    pack = sum(d["pack_mv"] for d in use) / 1000.0
+    cur = sum(d["current_a"] for d in use)
+    rem = sum(d["remaining_ah"] for d in use)
+    fcc = sum(d["fcc_ah"] for d in use)
     if g["mode"] == "series":
-        cur /= len(ds)
-        rem = min(d["remaining_ah"] for d in ds)
-        fcc = min(d["fcc_ah"] for d in ds)
+        cur /= len(use)
+        rem = min(d["remaining_ah"] for d in use)
+        fcc = min(d["fcc_ah"] for d in use)
     else:
-        pack /= len(ds)
+        pack /= len(use)
     soc = round(rem / fcc * 100) if fcc > 0 else 0
+    time_empty, time_full = (None, None) if stale else _group_times(g["mode"], use)
+
+    def avg(key):
+        vals = [d.get(key) for d in use if isinstance(d.get(key), (int, float))]
+        return round(sum(vals) / len(vals)) if vals else None
 
     base.update(
         cap_online_ah=round(fcc, 2),
@@ -1012,16 +1415,18 @@ def aggregate(g: dict) -> dict:
         soc=soc,
         remaining_ah=round(rem, 2),
         fcc_ah=round(fcc, 2),
-        cell_temp_c=round(sum(d["cell_temp_c"] for d in ds) / len(ds)),
-        mos_temp_c=round(sum(d["mos_temp_c"] for d in ds) / len(ds)),
-        soh=round(sum(d["soh"] for d in ds) / len(ds)),
-        cycles=max(d["cycles"] for d in ds),
-        discharged_ah=sum(d["discharged_ah"] for d in ds),
-        delta_mv=max((d["delta_mv"] or 0) for d in ds),
+        cell_temp_c=avg("cell_temp_c"),
+        mos_temp_c=avg("mos_temp_c"),
+        soh=avg("soh"),
+        cycles=max((d.get("cycles") or 0) for d in use),
+        discharged_ah=sum((d.get("discharged_ah") or 0) for d in use),
+        delta_mv=max((d.get("delta_mv") or 0) for d in use),
         cells_mv=[],
         balance_cells=[],
         protect="00000000",
         failure="000000",
+        time_empty_sec=round(time_empty, 1) if time_empty is not None else None,
+        time_full_sec=round(time_full, 1) if time_full is not None else None,
     )
     return base
 
@@ -1054,29 +1459,43 @@ class Reader:
     def __init__(self):
         self.buf = bytearray()
         self.event = asyncio.Event()
+        self.need = FRAME_LEN
 
     def on_notify(self, _char, data: bytearray):
         self.buf.extend(data)
-        if len(self.buf) >= FRAME_LEN:
+        if len(self.buf) >= self.need:
             self.event.set()
+
+    async def _request(self, client: BleakClient, cmd: int, timeout: float) -> bytes:
+        self.buf.clear()
+        self.event.clear()
+        frame = request_frame(cmd)
+        try:
+            await client.write_gatt_char(CH_WRITE, frame, response=False)
+        except Exception:
+            await client.write_gatt_char(CH_WRITE, frame, response=True)
+        try:
+            await asyncio.wait_for(self.event.wait(), timeout=timeout)
+        except asyncio.TimeoutError:
+            return b""
+        return bytes(self.buf)
 
     async def inquire(self, client: BleakClient, timeout=4.0) -> bytes | None:
         for _attempt in range(2):
-            self.buf.clear()
-            self.event.clear()
-            frame = request_frame(0x13)
-            try:
-                await client.write_gatt_char(CH_WRITE, frame, response=False)
-            except Exception:
-                await client.write_gatt_char(CH_WRITE, frame, response=True)
-            try:
-                await asyncio.wait_for(self.event.wait(), timeout=timeout)
-            except asyncio.TimeoutError:
-                continue
-            fr = bytes(self.buf[:FRAME_LEN])
+            data = await self._request(client, 0x13, timeout)
+            fr = data[:FRAME_LEN]
             if valid(fr):
                 return fr
         return None
+
+    async def version(self, client: BleakClient, timeout=2.0) -> dict:
+        """Ask for firmware/hardware info (0x16); never breaks the data stream."""
+        self.need = 24
+        try:
+            data = await self._request(client, 0x16, timeout)
+        finally:
+            self.need = FRAME_LEN
+        return parse_version_response(data)
 
 
 def pretty(name: str | None) -> str:
@@ -1133,8 +1552,110 @@ def save_seen(force=False):
         print(f"[-] scan_history.json: {exc}")
 
 
+_last_values_save = 0.0
+
+
+def load_last_values():
+    """Last good frame per battery, kept between runs so the UI can show it offline."""
+    if not LAST_VALUES_FILE.exists():
+        return
+    try:
+        data = json.loads(LAST_VALUES_FILE.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError) as exc:
+        print(f"[-] last_values.json: {exc}")
+        return
+    if not isinstance(data, dict):
+        return
+    with LOCK:
+        for addr, rec in data.items():
+            if not isinstance(rec, dict) or not isinstance(rec.get("data"), dict):
+                continue
+            name = str(rec.get("name") or "").strip()
+            if not name:
+                continue
+            try:
+                updated = float(rec.get("updated") or 0)
+            except (TypeError, ValueError):
+                continue
+            if updated <= 0:
+                continue
+            LAST_VALUES[str(addr)] = {"name": name, "data": rec["data"], "updated": updated}
+
+
+def save_last_values(force: bool = False):
+    global _last_values_save
+    now = time.time()
+    if not force and now - _last_values_save < 10:
+        return
+    _last_values_save = now
+    with LOCK:
+        data = json.loads(json.dumps(LAST_VALUES))
+    try:
+        LAST_VALUES_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=1),
+                                    encoding="utf-8")
+    except OSError as exc:
+        print(f"[-] last_values.json: {exc}")
+
+
+def remember_last(addr: str, name: str, data: dict, ts: float):
+    """Store the newest frame in memory and periodically on disk (lock held by caller)."""
+    LAST_VALUES[addr] = {"name": name, "data": data, "updated": ts}
+
+
+_known_save = 0.0
+
+
+def load_known_devices():
+    """Addresses the user monitors, so their cards survive a restart while offline."""
+    if not DEVICES_FILE.exists():
+        return
+    try:
+        data = json.loads(DEVICES_FILE.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError) as exc:
+        print(f"[-] devices.json: {exc}")
+        return
+    if not isinstance(data, list):
+        return
+    with LOCK:
+        for rec in data:
+            if not isinstance(rec, dict):
+                continue
+            addr = str(rec.get("address") or "").strip()
+            name = str(rec.get("name") or "").strip()
+            if addr and name:
+                SAVED_DEVICES[addr] = {"name": name, "manual": bool(rec.get("manual"))}
+
+
+def save_known_devices(force: bool = False):
+    global _known_save
+    now = time.time()
+    if not force and now - _known_save < 10:
+        return
+    _known_save = now
+    with LOCK:
+        payload = [{"address": addr, "name": e.get("name"), "manual": bool(e.get("manual"))}
+                   for addr, e in DEVICES.items()
+                   if e.get("name") and (e.get("manual") or e.get("updated"))]
+        SAVED_DEVICES.clear()
+        SAVED_DEVICES.update({rec["address"]: {"name": rec["name"], "manual": rec["manual"]}
+                              for rec in payload})
+    try:
+        DEVICES_FILE.write_text(json.dumps(payload, ensure_ascii=False, indent=1),
+                                encoding="utf-8")
+    except OSError as exc:
+        print(f"[-] devices.json: {exc}")
+
+
 async def scan_all() -> list:
     """One radio scan; remembers everything seen so the UI can show it."""
+    async with SCAN_LOCK:
+        if SCAN["items"] and time.time() - SCAN["ts"] < SCAN_MIN_GAP:
+            return list(SCAN["items"])
+        return await _scan_once()
+
+
+async def _scan_once() -> list:
+    """Radio scan without locking; call it through scan_all()."""
     try:
         found = await BleakScanner.discover(timeout=8, return_adv=True)
     except Exception as exc:
@@ -1210,53 +1731,174 @@ async def discover(needles) -> list:
         if needles:
             if not any(n.upper() in name.upper() for n in needles):
                 continue
-        elif not (it["ffe0"] or "P-12100" in name or "POWER" in name.upper()):
+        elif not (it["ffe0"] and (SHOW_ALL or is_battery_name(name)
+                                  or "POWER" in name.upper())):
             continue
         out.append({"address": it["address"], "name": pretty(name), "rssi": it["rssi"]})
     out.sort(key=lambda d: d["name"])
     return out
 
 
+_BATTERY_NAME_RE = re.compile(
+    r"^(?:[A-Z]-\d{5}|LT-\d|L-\d|S{1,2}-\d)", re.IGNORECASE)
+
+
+def is_battery_name(name: str | None) -> bool:
+    """Battery BLE names: P-/R- (Power Queen/Redodo), LT-/L- (LiTime), S-/SS-."""
+    return bool(_BATTERY_NAME_RE.match((name or "").strip()))
+
+
+def log_event(message: str, level: str = "i"):
+    """Timestamped, flushed log line: visible in the console and data/monitor.log."""
+    print(f"[{level}] {time.strftime('%Y-%m-%d %H:%M:%S')} {message}", flush=True)
+
+
+def describe_error(exc: BaseException) -> str:
+    """Full exception text plus Windows error codes, for the log and the UI tooltip."""
+    text = f"{type(exc).__name__}: {exc}"
+    extra = []
+    for attr in ("winerror", "hresult", "errno"):
+        try:
+            value = getattr(exc, attr, None)
+        except Exception:
+            value = None
+        if value is not None:
+            extra.append(f"{attr}={value}")
+    if extra:
+        text += " [" + ", ".join(extra) + "]"
+    return text
+
+
+_NOT_FOUND_HINTS = ("not found", "not in range", "unreachable", "no device",
+                    "0x80070490", "device not available")
+
+
+def looks_not_found(exc: BaseException) -> bool:
+    low = str(exc).lower()
+    return any(hint in low for hint in _NOT_FOUND_HINTS)
+
+
+def restored_records() -> dict:
+    """Batteries monitored/seen before, with their last frame when available."""
+    with LOCK:
+        out = {}
+        for addr, rec in SAVED_DEVICES.items():
+            name = pretty(rec.get("name"))
+            if name and name not in IGNORED:
+                out[addr] = {"name": name, "data": {}, "updated": None}
+        for addr, rec in LAST_VALUES.items():
+            out[addr] = dict(rec)
+        seen = [dict(rec) for rec in SEEN.values()]
+    for rec in seen:
+        addr = rec.get("address")
+        if not addr or addr in out or not rec.get("ffe0"):
+            continue
+        raw_name = (rec.get("name") or "").strip()
+        name = pretty(raw_name)
+        if not is_battery_name(raw_name) or name in IGNORED:
+            continue
+        logger = CsvLog(DATA_DIR / f"{re.sub(r'[^A-Za-z0-9_.-]', '_', name)}.csv")
+        found = csv_last_record(logger)
+        if found:
+            data, ts = found
+            out[addr] = {"name": name, "data": data, "updated": ts}
+    return {addr: rec for addr, rec in out.items()
+            if rec.get("name") and pretty(rec["name"]) not in IGNORED}
+
+
+async def probe_protocol(target, timeout: float = 15.0) -> dict:
+    """Connect, validate one real BMS frame and read the firmware info.
+
+    Used before a manual add, so a random FFE0 device (JK, HM-10, etc.) is not
+    persisted as a battery. Read-only: only Inquire/version requests are sent.
+    """
+    reader = Reader()
+    try:
+        async with BleakClient(target, timeout=timeout) as client:
+            await client.start_notify(CH_NOTIFY, reader.on_notify)
+            frame = await reader.inquire(client, timeout=5.0)
+            if not frame:
+                return {"ok": False,
+                        "error": "no valid BMS response (unsupported protocol)"}
+            info = {}
+            try:
+                info = await reader.version(client, timeout=2.0)
+            except Exception as exc:
+                log_event(f"version query failed: {describe_error(exc)}", "!")
+            return {"ok": True, "data": decode(frame), "info": info}
+    except Exception as exc:
+        return {"ok": False, "error": describe_error(exc),
+                "not_found": looks_not_found(exc)}
+
+
 async def worker(addr: str, name: str):
     reader = Reader()
     label = name
     retries = 0
+    attempt = 0
     while True:
+        attempt += 1
+        dev = None
+        via = "scan"
         try:
-            set_entry(addr, connected=False, error="scanning")
-            dev = await BleakScanner.find_device_by_address(addr, timeout=6)
-            if dev is None:
-                found = await discover([name])
-                retries += 1
-                if not found:
-                    set_entry(addr, error="not in range")
-                    await asyncio.sleep(min(30, 4 * retries))
-                    continue
-                if found[0]["address"] != addr:
-                    with LOCK:
-                        if addr in DEVICES and found[0]["address"] not in DEVICES:
-                            DEVICES[found[0]["address"]] = DEVICES.pop(addr)
-                    addr = found[0]["address"]
+            set_entry(addr, connected=False, error="scanning", error_detail=None,
+                      last_attempt=time.time(), attempts=attempt)
+            log_event(f"{label}: search #{attempt} for {addr}")
+            try:
                 dev = await BleakScanner.find_device_by_address(addr, timeout=6)
+            except Exception as exc:
+                log_event(f"{label}: address lookup failed: {describe_error(exc)}", "!")
+            if dev is not None:
+                rssi = getattr(dev, "rssi", None)
+                log_event(f"{label}: found by address ({addr}"
+                          + (f", {rssi} dBm)" if rssi is not None else ")"))
+            else:
+                log_event(f"{label}: no advertisement, searching by name")
+                found = await discover([name])
+                if found:
+                    if found[0]["address"] != addr:
+                        old, addr = addr, found[0]["address"]
+                        with LOCK:
+                            if old in DEVICES and addr not in DEVICES:
+                                DEVICES[addr] = DEVICES.pop(old)
+                            if old in LAST_VALUES and addr not in LAST_VALUES:
+                                LAST_VALUES[addr] = LAST_VALUES.pop(old)
+                        save_known_devices(force=True)
+                        save_last_values(force=True)
+                        log_event(f"{label}: address changed {old} -> {addr}")
+                    dev = await BleakScanner.find_device_by_address(addr, timeout=6)
+                    if dev is not None:
+                        rssi = getattr(dev, "rssi", None)
+                        log_event(f"{label}: found by name ({addr}"
+                                  + (f", {rssi} dBm)" if rssi is not None else ")"))
                 if dev is None:
-                    await asyncio.sleep(4)
-                    continue
+                    retries += 1
+                    set_entry(addr, error="not in range")
+                    via = "direct"
+                    log_event(f"{label}: not advertised (miss #{retries}); "
+                              f"direct connect to {addr}", "!")
 
-            async with BleakClient(dev, timeout=20) as client:
+            set_entry(addr, error="connecting" if dev is not None else "connecting (direct)")
+            target = dev if dev is not None else addr
+            async with BleakClient(target, timeout=20) as client:
                 await client.start_notify(CH_NOTIFY, reader.on_notify)
                 retries = 0
-                set_entry(addr, connected=True, error=None)
-                print(f"[+] {label}: connected ({dev.address})")
+                set_entry(addr, connected=True, error=None, error_detail=None,
+                          connected_since=time.time())
+                log_event(f"{label}: connected via {via} ({addr})")
                 fails = 0
                 while client.is_connected:
                     fr = await reader.inquire(client)
                     if fr:
                         data = decode(fr)
                         ts = time.time()
+                        first_frame = False
                         with LOCK:
                             e = DEVICES[addr]
                             e.update(connected=True, error=None, data=data, updated=ts,
-                                     polls=e.get("polls", 0) + 1)
+                                     protocol_ok=True, polls=e.get("polls", 0) + 1)
+                            first_frame = e.get("polls") == 1
+                            remember_last(addr, label, data, ts)
                             e["history"].append(
                                 [round(ts, 1), round(data["pack_mv"] / 1000, 3),
                                  round(data["current_a"], 2), data["soc"]]
@@ -1266,6 +1908,15 @@ async def worker(addr: str, name: str):
                                 e["last_log"] = ts
                                 dev_log = (e["logger"], data, ts)
                             group_logs = refresh_groups(ts)
+                        save_last_values()
+                        if first_frame:
+                            save_known_devices(force=True)
+                            info = await reader.version(client)
+                            if info:
+                                set_entry(addr, bms_version=info.get("version"),
+                                          bms_hardware=info.get("hardware"))
+                                log_event(f"{label}: BMS {info.get('version')} "
+                                          f"· {info.get('hardware') or 'hardware ?'}")
                         if dev_log:
                             dev_log[0].append(dev_log[1], dev_log[2])
                         for lg, gd, gts in group_logs:
@@ -1282,10 +1933,21 @@ async def worker(addr: str, name: str):
                         if fails >= 3:
                             break
                     await asyncio.sleep(POLL_INTERVAL)
+                log_event(f"{label}: link closed")
         except Exception as exc:
-            set_entry(addr, connected=False, error=f"{type(exc).__name__}: {exc}")
-            print(f"[-] {label}: {type(exc).__name__}: {exc}")
-        await asyncio.sleep(4)
+            detail = describe_error(exc)
+            not_found = dev is None and looks_not_found(exc)
+            short = "not in range" if not_found else f"{type(exc).__name__}: {exc}"[:180]
+            set_entry(addr, connected=False, error=short, error_detail=detail,
+                      last_error_at=time.time())
+            log_event(f"{label}: {'not in range' if not_found else 'connection failed'}: {detail}",
+                      "!")
+            if not not_found:
+                traceback.print_exc()
+            if dev is None and via != "direct":
+                retries += 1
+        wait = 4 if dev is not None else min(30, 4 * max(1, retries))
+        await asyncio.sleep(wait)
 
 
 def set_entry(addr, **kw):
@@ -1293,8 +1955,29 @@ def set_entry(addr, **kw):
         DEVICES.setdefault(addr, {}).update(kw)
 
 
-async def register_device(address: str, name: str, rssi=None) -> bool:
-    """Create a device entry and start its worker. Must be called from the event loop."""
+def scan_target(address: str):
+    """Address/name/RSSI for a discovered device: live scan first, then history."""
+    key = (address or "").lower()
+    with LOCK:
+        for it in SCAN["items"]:
+            if it["address"].lower() == key:
+                return {"address": it["address"], "name": it.get("name", ""),
+                        "rssi": it.get("rssi")}
+        rec = SEEN.get(address) or next(
+            (r for r in SEEN.values() if r["address"].lower() == key), None)
+    if not rec:
+        return None
+    return {"address": rec["address"], "name": rec.get("name", ""),
+            "rssi": rec.get("last_rssi")}
+
+
+async def register_device(address: str, name: str, rssi=None, last: dict | None = None,
+                          manual: bool = False, info: dict | None = None) -> bool:
+    """Create a device entry and start its worker. Must be called from the event loop.
+
+    `last` is a saved snapshot {"data", "updated"} (or None); without one the
+    newest CSV row is used, so the dashboard has values before the first frame.
+    """
     name = pretty(name)
     if name in IGNORED:
         with LOCK:
@@ -1303,19 +1986,35 @@ async def register_device(address: str, name: str, rssi=None) -> bool:
     with LOCK:
         if address in DEVICES:
             return False
+    logger = CsvLog(DATA_DIR / f"{re.sub(r'[^A-Za-z0-9_.-]', '_', name)}.csv")
+    seed_data, seed_updated = {}, None
+    if isinstance(last, dict) and isinstance(last.get("data"), dict) and last["data"]:
+        seed_data = last["data"]
+        seed_updated = last.get("updated")
+    if not seed_data:
+        found = csv_last_record(logger)
+        if found:
+            seed_data, seed_updated = found
     entry = {
         "id": address, "name": name, "connected": False, "error": "starting",
-        "updated": None, "polls": 0, "data": {},
-        "history": deque(maxlen=HISTORY_MAX),
-        "logger": CsvLog(DATA_DIR / f"{re.sub(r'[^A-Za-z0-9_.-]', '_', name)}.csv"),
-        "last_log": 0.0,
+        "error_detail": None, "updated": seed_updated, "polls": 0,
+        "data": dict(seed_data), "restored": bool(seed_data),
+        "manual": bool(manual), "protocol_ok": bool(info),
+        "bms_version": (info or {}).get("version"),
+        "bms_hardware": (info or {}).get("hardware"),
+        "attempts": 0, "last_attempt": None,
+        "connected_since": None, "history": deque(maxlen=HISTORY_MAX),
+        "logger": logger, "last_log": 0.0,
     }
     entry["history"].extend(load_log_points(entry["logger"], LOAD_HOURS))
     with LOCK:
         if address in DEVICES:
             return False
         DEVICES[address] = entry
-    print(f"[i] {name}  {address}" + (f"  {rssi} dBm" if rssi is not None else "  (added manually)"))
+    origin = "  (restored)" if last else ("  (added manually)" if manual else "")
+    log_event(f"{name}  {address}" + (f"  {rssi} dBm" if rssi is not None else "")
+              + origin + ("  (last data restored)" if seed_data else ""))
+    save_known_devices(force=True)
     task = asyncio.create_task(worker(address, name))
     with LOCK:
         if address in DEVICES:
@@ -1341,7 +2040,10 @@ async def remove_device(address: str) -> bool:
         for g in GROUPS:
             g["data"] = aggregate(g)
         IGNORED.add(name)
+        LAST_VALUES.pop(address, None)
     save_ignored()
+    save_last_values(force=True)
+    save_known_devices(force=True)
     if payload is not None:
         save_groups_file(payload)
     task = e.get("task")
@@ -1405,8 +2107,16 @@ class Handler(BaseHTTPRequestHandler):
                     "name": e.get("name") or addr,
                     "connected": bool(e.get("connected")),
                     "error": e.get("error"),
+                    "error_detail": e.get("error_detail"),
                     "updated": e.get("updated"),
                     "polls": e.get("polls", 0),
+                    "attempts": e.get("attempts", 0),
+                    "last_attempt": e.get("last_attempt"),
+                    "connected_since": e.get("connected_since"),
+                    "restored": bool(e.get("restored")),
+                    "protocol_ok": e.get("protocol_ok"),
+                    "bms_version": e.get("bms_version"),
+                    "bms_hardware": e.get("bms_hardware"),
                     "data": e.get("data", {}),
                 } for addr, e in DEVICES.items()]
                 grps = [{
@@ -1414,7 +2124,7 @@ class Handler(BaseHTTPRequestHandler):
                     "members": g["members"],
                     "connected": bool((g.get("data") or {}).get("online")),
                     "error": None,
-                    "updated": time.time(),
+                    "updated": (g.get("data") or {}).get("updated") or time.time(),
                     "polls": 0,
                     "data": g.get("data") or {},
                 } for g in GROUPS]
@@ -1436,14 +2146,25 @@ class Handler(BaseHTTPRequestHandler):
                                  "label": (e.get("name") if e else None)})
                 scan_payload = {"ts": SCAN["ts"], "items": scan_items, "seen": seen}
                 bt_payload = dict(BT_STATUS)
+                starting = not DISCOVERY_DONE
             devs.sort(key=lambda d: d["name"])
             self._send(json.dumps({"ts": time.time(), "devices": devs,
                                    "groups": grps, "scan": scan_payload,
-                                   "bluetooth": bt_payload}).encode())
+                                   "bluetooth": bt_payload, "starting": starting,
+                                   "uptime": round(time.time() - START_TS, 1)}).encode())
+            return
+
+        if url.path == "/api/meta":
+            self._send(json.dumps(ui_meta()).encode())
             return
 
         if url.path == "/api/about":
             self._send(json.dumps(about_info()).encode())
+            return
+
+        if url.path == "/api/update":
+            force = (q.get("force") or ["0"])[0].lower() in ("1", "true", "yes")
+            self._send(json.dumps(check_for_update(force)).encode())
             return
 
         if url.path == "/api/history":
@@ -1453,7 +2174,15 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 window = 0
             window = max(0, window)
-            payload = get_history(ident, window)
+
+            def bound(name):
+                try:
+                    value = float((q.get(name) or [""])[0])
+                except ValueError:
+                    return None
+                return value if math.isfinite(value) else None
+
+            payload = get_history(ident, window, bound("from"), bound("to"))
             self._send(json.dumps({"id": ident, **payload}).encode())
             return
 
@@ -1471,21 +2200,41 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         url = urlparse(self.path)
 
+        if url.path == "/api/view":
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+                body = json.loads(self.rfile.read(length) or b"{}")
+                view = set_view(body)
+                self._send(json.dumps({"ok": True, "view": view, "verified": True}).encode())
+            except Exception as exc:
+                self._send(json.dumps({"ok": False, "error": str(exc)}).encode(), code=400)
+            return
+
         if url.path == "/api/config":
             try:
                 length = int(self.headers.get("Content-Length") or 0)
                 body = json.loads(self.rfile.read(length) or b"{}")
                 if not isinstance(body, dict):
                     raise ValueError("config must be a JSON object")
-                cfg = _clean_config(_merge_cfg(DEFAULT_CONFIG, body))
-                CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-                CONFIG_FILE.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n",
-                                       encoding="utf-8")
-                _cfg_cache["mtime"] = None
-                _cfg_cache["data"] = None
-                self._send(json.dumps(cfg).encode())
+                with CONFIG_LOCK:
+                    cfg = _clean_config(_merge_cfg(get_config(), body))
+                    save_config(cfg)
+                self._send(json.dumps({"ok": True, "config": cfg, "verified": True}).encode())
             except Exception as exc:
                 self._send(json.dumps({"ok": False, "error": str(exc)}).encode(), code=400)
+            return
+
+        if url.path == "/api/scan":
+            if MAIN_LOOP is None:
+                self._send(json.dumps({"ok": False, "error": "not ready"}).encode(), code=503)
+                return
+            try:
+                items = asyncio.run_coroutine_threadsafe(
+                    scan_all(), MAIN_LOOP).result(timeout=25)
+                self._send(json.dumps({"ok": True, "count": len(items),
+                                       "ts": SCAN["ts"]}).encode())
+            except Exception as exc:
+                self._send(json.dumps({"ok": False, "error": str(exc)}).encode(), code=502)
             return
 
         if url.path == "/api/scan/clear":
@@ -1500,18 +2249,49 @@ class Handler(BaseHTTPRequestHandler):
                 length = int(self.headers.get("Content-Length") or 0)
                 body = json.loads(self.rfile.read(length) or b"{}")
                 addr = str(body.get("address") or "")
-                with LOCK:
-                    item = next((i for i in SCAN["items"]
-                                 if i["address"].lower() == addr.lower()), None)
-                if not item:
-                    self._send(json.dumps({"ok": False, "error": "not in scan list"}).encode(), code=404)
+                target = scan_target(addr)
+                if not target:
+                    self._send(json.dumps({"ok": False, "error": "unknown device"}).encode(), code=404)
                     return
                 if MAIN_LOOP is None:
                     self._send(json.dumps({"ok": False, "error": "not ready"}).encode(), code=503)
                     return
-                name = item["name"] or addr
+                name = target["name"] or addr
+                with LOCK:
+                    already = target["address"] in DEVICES
+                    in_air = any(it["address"].lower() == target["address"].lower()
+                                 for it in SCAN["items"])
+                if already:
+                    self._send(json.dumps({"ok": True, "added": False,
+                                           "name": name}).encode())
+                    return
+                probe = None
+                if in_air:
+                    log_event(f"{name}: checking BMS protocol before adding")
+                    probe = asyncio.run_coroutine_threadsafe(
+                        probe_protocol(target["address"]), MAIN_LOOP).result(timeout=35)
+                    if not probe.get("ok"):
+                        error = probe.get("error") or "unsupported BMS protocol"
+                        if "unsupported protocol" in error:
+                            log_event(f"{name}: add rejected — {error}", "!")
+                            self._send(json.dumps({"ok": False, "error": error}).encode())
+                            return
+                        # cannot verify right now (phone app holds the link, weak
+                        # signal, ...): keep the add, the worker will check later
+                        log_event(f"{name}: protocol check deferred — {error}", "!")
+                        probe = None
+                else:
+                    log_event(f"{name}: not in air; protocol check deferred to connection")
+                info = (probe or {}).get("info") or {}
+                if info:
+                    log_event(f"{name}: protocol OK · BMS {info.get('version')} "
+                              f"· {info.get('hardware') or 'hardware ?'}")
+                last = ({"data": probe["data"], "updated": time.time()}
+                        if probe else None)
                 future = asyncio.run_coroutine_threadsafe(
-                    register_device(item["address"], name), MAIN_LOOP)
+                    register_device(target["address"], name, target["rssi"], manual=True,
+                                    last=last, info=info),
+                    MAIN_LOOP)
                 added = future.result(timeout=8)
                 self._send(json.dumps({"ok": True, "added": added,
                                        "name": name}).encode())
@@ -1586,28 +2366,57 @@ def open_window(url: str) -> None:
     except Exception as exc:
         print(f"[-] embedded window unavailable ({exc}); open {url} manually")
         return
+    # Keep the WebView2 profile inside data/ instead of a random %TEMP% folder:
+    # pywebview defaults to private mode, which puts the cache in a temp dir that
+    # is left behind after exit.
+    try:
+        user = re.sub(r"[^A-Za-z0-9_.-]", "_", getpass.getuser() or "user")
+    except Exception:
+        user = "user"
+    storage = DATA_DIR / "webview" / user
+    try:
+        storage.mkdir(parents=True, exist_ok=True)
+        webview_kwargs = {"private_mode": False, "storage_path": str(storage)}
+    except OSError as exc:
+        print(f"[-] webview cache: {exc} (using a temporary profile)")
+        webview_kwargs = {}
     webview.create_window("Power Peasant", url, width=1120, height=840, min_size=(860, 620))
-    webview.start()
+    webview.start(**webview_kwargs)
 
 
 # ------------------------------------------------------------------- main ---
 
 async def run(args):
-    global MAIN_LOOP
+    global MAIN_LOOP, DISCOVERY_DONE
     MAIN_LOOP = asyncio.get_running_loop()
 
     count = 0
+    restored = restored_records()
+    if args.device:
+        needles = [n.upper() for n in args.device]
+        restored = {addr: rec for addr, rec in restored.items()
+                    if any(n in (rec.get("name") or "").upper() for n in needles)}
+    for addr, rec in restored.items():
+        if await register_device(addr, rec.get("name") or addr, None, last=rec):
+            count += 1
+    if restored:
+        with_data = sum(1 for rec in restored.values() if rec.get("data"))
+        log_event(f"restored {len(restored)} known batter{'y' if len(restored) == 1 else 'ies'} "
+                  f"({with_data} with the last received data)")
+
     try:
         initial = await discover(args.device)
     except Exception as exc:
         initial = []
         print(f"[-] initial scan failed: {type(exc).__name__}: {exc}")
     for d in initial:
-        if await register_device(d["address"], d["name"], d["rssi"]):
+        if await register_device(d["address"], d["name"], d["rssi"],
+                                 last=LAST_VALUES.get(d["address"])):
             count += 1
     if not count:
         print("[!] no batteries yet, still scanning…")
     with LOCK:
+        DISCOVERY_DONE = True
         for g in GROUPS:
             g["data"] = aggregate(g)
 
@@ -1622,8 +2431,33 @@ async def run(args):
             print(f"[-] discovery: {type(exc).__name__}: {exc}")
 
 
+def setup_logging():
+    """Packaged (windowed) builds have no console: mirror output to data/monitor.log."""
+    if not getattr(sys, "frozen", False):
+        return
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        path = DATA_DIR / "monitor.log"
+        prev = DATA_DIR / "monitor.log.prev"
+        if path.exists():
+            try:
+                if prev.exists():
+                    prev.unlink()
+                path.replace(prev)
+            except OSError:
+                pass
+        stream = open(path, "a", encoding="utf-8", errors="replace", buffering=1)
+        sys.stdout = stream
+        sys.stderr = stream
+        log_event(f"Power Peasant started; log -> {path}")
+    except OSError:
+        pass
+
+
 def main():
     global POLL_INTERVAL, LOG_INTERVAL, LOAD_HOURS, SHOW_ALL
+    setup_logging()
+    ensure_config()
     ap = argparse.ArgumentParser()
     ap.add_argument("device", nargs="*", help="name fragments, e.g. B02556 B01607 (default: all in range)")
     ap.add_argument("--host", default="127.0.0.1",
@@ -1657,6 +2491,8 @@ def main():
     load_groups()
     load_ignored()
     load_seen()
+    load_last_values()
+    load_known_devices()
 
     local = "127.0.0.1" if args.host in ("0.0.0.0", "::") else args.host
     url = f"http://{local}:{args.port}/"

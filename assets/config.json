@@ -6,6 +6,7 @@
       "cellMin": "#f2a33c",
       "cellNormal": "#58a6ff",
       "cellCritical": "#ef5b5b",
+      "chartNegative": "#4dd0e1",
       "chartPalette": [
         "#58a6ff",
         "#35d07f",
@@ -30,6 +31,12 @@
     },
     "chart": {
       "defaultWindowSec": 600
+    },
+    "view": {
+      "metric": "soc",
+      "chartStyle": "line",
+      "windowSec": 21600,
+      "selected": "2518af88-41bf-42f2-b901-99404eeb529e"
     },
     "scan": {
       "onlyBatteries": true

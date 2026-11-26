@@ -26,31 +26,67 @@ jobs:
       - name: Run tests
         run: python -m unittest discover -s tests -v
 
-      - name: Build portable app and self-extracting exe
+      - name: Ensure NSIS
+        shell: pwsh
+        run: |
+          function Find-Makensis {
+            $list = @()
+            if ($env:PP_MAKENSIS) { $list += $env:PP_MAKENSIS }
+            $cmd = Get-Command makensis.exe -ErrorAction SilentlyContinue
+            if ($cmd) { $list += $cmd.Source }
+            if ($env:ProgramFiles) { $list += Join-Path $env:ProgramFiles 'NSIS\makensis.exe' }
+            if (${env:ProgramFiles(x86)}) { $list += Join-Path ${env:ProgramFiles(x86)} 'NSIS\makensis.exe' }
+            $list | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          }
+
+          $makensis = Find-Makensis
+          if (-not $makensis) {
+            Write-Host 'NSIS not found - installing with Chocolatey...'
+            choco install nsis -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "choco install nsis failed (exit $LASTEXITCODE)" }
+            # the current session does not see the machine PATH updated by choco
+            $makensis = Find-Makensis
+          }
+          if (-not $makensis) { throw 'NSIS is not available after installation' }
+          & $makensis /VERSION
+          Write-Host
+          if ($LASTEXITCODE -ne 0) { throw "makensis failed (exit $LASTEXITCODE)" }
+          "PP_MAKENSIS=$makensis" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build portable app and Windows package
         shell: pwsh
         run: |
           $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "dev-$env:GITHUB_RUN_NUMBER" }
-          .\packaging\build.ps1 -Sfx -Version $version
-          $sfx = "dist\release\PowerPeasant-$version-win64.exe"
-          if (-not (Test-Path $sfx)) { throw "SFX not found: $sfx" }
-          "SFX_PATH=$sfx" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          .\packaging\build.ps1 -Installer -Version $version
+          $built = @(Get-ChildItem "dist\release" -Filter "PowerPeasant-$version-win64*.exe")
+          if (-not $built) { throw "The build produced no Windows package" }
+          $built | ForEach-Object { "built: $($_.Name)" }
+          "ARTIFACT_PATH=dist/release/PowerPeasant-$version-win64*.exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: PowerPeasant-win64
-          path: ${{ env.SFX_PATH }}
+          path: ${{ env.ARTIFACT_PATH }}
 
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.SFX_PATH }}
+          files: ${{ env.ARTIFACT_PATH }}
           generate_release_notes: true
           body: |
-            Portable self-extracting build for Windows x64.
+            Windows x64 build.
 
-            Run the downloaded `.exe` and choose the folder to unpack into; it creates
-            the `PowerPeasant` folder there, then start `PowerPeasant.exe` inside it.
+            Normally this is the installer
+            `PowerPeasant-<version>-win64-setup.exe`: it installs to
+            `C:\Program Files\PowerPeasant` (asks for administrator rights) and adds
+            Start-menu and desktop shortcuts plus an uninstaller.
+
+            If the build machine had no NSIS, the asset is the portable
+            self-extracting archive `PowerPeasant-<version>-win64.exe` instead:
+            run it, choose any folder (a USB stick works), then start
+            `PowerPeasant.exe` inside it.
+
             Requires Windows 10/11 x64 with Edge WebView2 (preinstalled) and a
             Bluetooth LE adapter.
