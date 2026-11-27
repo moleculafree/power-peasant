@@ -36,8 +36,7 @@ switches.
 Windows users can download the installer
 `PowerPeasant-<version>-win64-setup.exe` (defaults to `C:\Program Files\PowerPeasant`)
 from [Releases](https://github.com/moleculafree/power-peasant/releases) (Windows
-10/11 x64). When a build has no NSIS, the release contains the portable
-self-extracting exe instead.
+10/11 x64).
 
 
 ## Quick start from sources (linux/windows)
